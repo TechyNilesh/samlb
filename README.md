@@ -1,8 +1,7 @@
 <p align="center">
-  <h1 align="center">SAMLB</h1>
-  <p align="center"><strong>Streaming AutoML Benchmark</strong></p>
-  <p align="center">A unified benchmark framework for evaluating AutoML systems on data streams with fast C++ base algorithms and rigorous prequential evaluation.</p>
+  <img src="https://raw.githubusercontent.com/TechyNilesh/samlb/main/assets/samlb_logo.png" alt="SAMLB Logo" width="400">
 </p>
+<p align="center">A unified benchmark framework for evaluating AutoML systems on data streams with fast C++ base algorithms and rigorous prequential evaluation.</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg" alt="Python">
