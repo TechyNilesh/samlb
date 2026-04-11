@@ -427,7 +427,7 @@ If you use SAMLB in your research, please cite:
 @software{samlb2024,
   title  = {SAMLB: Streaming AutoML Benchmark},
   author = {Verma, Nilesh and Bifet, Albert and Pfahringer, Bernhard and Bahri, Maroua},
-  year   = {2024},
+  year   = {2026},
   url    = {https://github.com/TechyNilesh/samlb}
 }
 ```

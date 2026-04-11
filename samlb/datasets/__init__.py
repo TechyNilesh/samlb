@@ -3,7 +3,10 @@ samlb.datasets
 ~~~~~~~~~~~~~~
 Unified dataset loader for all SAMLB benchmark datasets (NPZ format).
 
-All datasets are stored as compressed NPZ files with a consistent schema:
+Datasets are auto-downloaded from GitHub on first use and cached locally
+in ``~/.samlb/datasets/``.
+
+All datasets follow a consistent schema:
   X            float32  (n_samples, n_features)  — feature matrix
   y            float32  or int32 (n_samples,)    — labels / targets
   feature_names str[]   (n_features,)
@@ -24,32 +27,54 @@ Usage
 from __future__ import annotations
 
 import os
+import sys
+import urllib.request
 import numpy as np
+from pathlib import Path
 from typing import Iterator, Tuple, Dict, Any
 
-_ROOT = os.path.dirname(__file__)
-_CLS_DIR = os.path.join(_ROOT, "classification")
-_REG_DIR = os.path.join(_ROOT, "regression")
+# ── dataset registry ─────────────────────────────────────────────────────────
 
-_TASK_DIRS = {
-    "classification": _CLS_DIR,
-    "clustering":     _CLS_DIR,   # same datasets as classification
-    "regression":     _REG_DIR,
+_DATASETS = {
+    "classification": [
+        "adult", "covertype", "credit_card", "electricity", "insects",
+        "movingRBF", "moving_squares", "new_airlines", "nomao", "poker_hand",
+        "sea_high_abrupt_drift", "shuttle", "synth_RandomRBFDrift",
+        "synth_agrawal", "vehicle_sensIT",
+    ],
+    "regression": [
+        "FriedmanGra", "House8L", "MetroTraffic", "ailerons", "bike",
+        "california_housing", "cps88wages", "diamonds", "elevators", "fifa",
+        "fried", "hyperA", "kings_county", "superconductivity", "wave_energy",
+    ],
 }
+_DATASETS["clustering"] = _DATASETS["classification"]
+
+_BASE_URL = (
+    "https://github.com/TechyNilesh/samlb/raw/main/"
+    "samlb/datasets/{task}/{name}.npz"
+)
+
+# Local cache directory
+_CACHE_DIR = Path.home() / ".samlb" / "datasets"
+
+# Package-bundled directory (used in development / editable installs)
+_PKG_DIR = Path(__file__).parent
 
 
 # ── public API ────────────────────────────────────────────────────────────────
 
 def list_datasets(task: str = "classification") -> list[str]:
     """Return sorted list of available dataset names for a task."""
-    d = _task_dir(task)
-    return sorted(f[:-4] for f in os.listdir(d) if f.endswith(".npz"))
+    _validate_task(task)
+    base_task = "classification" if task == "clustering" else task
+    return sorted(_DATASETS[base_task])
 
 
 def load(name: str, task: str = "classification",
          max_samples: int | None = None) -> tuple:
     """
-    Load a dataset by name.
+    Load a dataset by name. Downloads from GitHub on first use.
 
     Parameters
     ----------
@@ -122,7 +147,6 @@ def stream(name: str, task: str = "classification",
     for i in range(len(X)):
         x_row = X[i]
         if normalize:
-            # Update per-feature bounds using the current sample, then scale.
             if x_min is None:
                 x_min = x_row.copy()
                 x_max = x_row.copy()
@@ -140,19 +164,65 @@ def stream(name: str, task: str = "classification",
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-def _task_dir(task: str) -> str:
-    if task not in _TASK_DIRS:
-        raise ValueError(f"Unknown task {task!r}. Choose from {list(_TASK_DIRS)}")
-    return _TASK_DIRS[task]
+def _validate_task(task: str) -> None:
+    if task not in _DATASETS:
+        raise ValueError(f"Unknown task {task!r}. Choose from {list(_DATASETS)}")
 
 
 def _resolve(name: str, task: str) -> str:
-    d    = _task_dir(task)
-    path = os.path.join(d, f"{name}.npz")
-    if not os.path.exists(path):
-        available = list_datasets(task)
+    """Find dataset file: check package dir first, then cache, then download."""
+    _validate_task(task)
+    base_task = "classification" if task == "clustering" else task
+
+    if name not in _DATASETS[base_task]:
         raise FileNotFoundError(
             f"Dataset {name!r} not found for task={task!r}.\n"
-            f"Available: {available}"
+            f"Available: {list_datasets(task)}"
         )
-    return path
+
+    # 1. Check package-bundled directory (editable / dev install)
+    pkg_path = _PKG_DIR / base_task / f"{name}.npz"
+    if pkg_path.exists():
+        return str(pkg_path)
+
+    # 2. Check local cache
+    cache_path = _CACHE_DIR / base_task / f"{name}.npz"
+    if cache_path.exists():
+        return str(cache_path)
+
+    # 3. Download from GitHub
+    _download(name, base_task, cache_path)
+    return str(cache_path)
+
+
+def _download(name: str, task: str, dest: Path) -> None:
+    """Download a single dataset from GitHub to the local cache."""
+    url = _BASE_URL.format(task=task, name=name)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    print(f"Downloading {name} ({task})... ", end="", flush=True)
+    try:
+        tmp = str(dest) + ".tmp"
+        urllib.request.urlretrieve(url, tmp, reporthook=_progress)
+        os.replace(tmp, dest)
+        print(" done.", flush=True)
+    except Exception as e:
+        # Clean up partial download
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise RuntimeError(
+            f"Failed to download dataset {name!r} from {url}.\n"
+            f"Error: {e}\n"
+            f"You can manually download it and place it at: {dest}"
+        ) from e
+
+
+def _progress(block_num: int, block_size: int, total_size: int) -> None:
+    """Simple progress indicator for urllib downloads."""
+    if total_size > 0:
+        downloaded = block_num * block_size
+        pct = min(100, downloaded * 100 // total_size)
+        mb = downloaded / (1024 * 1024)
+        total_mb = total_size / (1024 * 1024)
+        sys.stdout.write(f"\rDownloading... {pct}% ({mb:.1f}/{total_mb:.1f} MB)")
+        sys.stdout.flush()

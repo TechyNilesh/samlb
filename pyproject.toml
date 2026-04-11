@@ -46,7 +46,9 @@ dev = [
 cmake.build-type = "Release"
 cmake.source-dir = "."
 wheel.packages = ["samlb"]
+wheel.exclude = ["samlb/datasets/**/*.npz"]
 build-dir = "build/{wheel_tag}"
+sdist.exclude = ["samlb/datasets/**/*.npz"]
 
 [tool.scikit-build.cmake.define]
 PYBIND11_FINDPYTHON = "ON"
