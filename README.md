@@ -34,7 +34,7 @@ pip install samlb
 ### From source
 
 ```bash
-git clone https://github.com/nileshverma/samlb.git
+git clone https://github.com/TechyNilesh/samlb.git
 cd samlb
 pip install -e ".[dev]"
 ```
@@ -236,7 +236,7 @@ We welcome contributions! Whether you are adding a new AutoML framework, new dat
 ### Development Setup
 
 ```bash
-git clone https://github.com/nileshverma/samlb.git
+git clone https://github.com/TechyNilesh/samlb.git
 cd samlb
 pip install -e ".[dev]"
 ```
@@ -429,7 +429,7 @@ If you use SAMLB in your research, please cite:
   title  = {SAMLB: Streaming AutoML Benchmark},
   author = {Verma, Nilesh and Bifet, Albert and Pfahringer, Bernhard and Bahri, Maroua},
   year   = {2024},
-  url    = {https://github.com/nileshverma/samlb}
+  url    = {https://github.com/TechyNilesh/samlb}
 }
 ```
 
