@@ -1,0 +1,59 @@
+[build-system]
+requires = ["scikit-build-core>=0.9", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "samlb"
+version = "0.1.0"
+description = "Streaming AutoML Benchmark — fast C++ base algorithms + unified AutoML frameworks"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "SAMLB Contributors" }]
+keywords = ["streaming", "automl", "benchmark", "machine-learning", "data-streams"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C++",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "river>=0.21",
+    "scikit-learn>=1.3",
+    "numpy>=1.24",
+    "openml>=0.15.1",
+]
+
+[project.optional-dependencies]
+vw = [
+    "flaml[vw]>=2.3",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-benchmark",
+    "ruff",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "pytest-benchmark",
+    "ruff",
+    "ipykernel",
+]
+
+[tool.scikit-build]
+cmake.build-type = "Release"
+cmake.source-dir = "."
+wheel.packages = ["samlb"]
+build-dir = "build/{wheel_tag}"
+
+[tool.scikit-build.cmake.define]
+PYBIND11_FINDPYTHON = "ON"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
