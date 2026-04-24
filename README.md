@@ -6,7 +6,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg" alt="Python">
   <img src="https://img.shields.io/pypi/v/samlb.svg" alt="PyPI">
-  <img src="https://img.shields.io/pypi/dm/samlb?color=green&label=Downloads" alt="Downloads">
+  <img src="https://static.pepy.tech/badge/samlb" alt="Downloads">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
 </p>
 
