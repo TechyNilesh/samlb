@@ -4,10 +4,10 @@
 <p align="center">A unified benchmark framework for evaluating AutoML systems on data streams with fast C++ base algorithms and rigorous prequential evaluation.</p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg" alt="Python">
-  <img src="https://img.shields.io/pypi/v/samlb.svg" alt="PyPI">
-  <img src="https://static.pepy.tech/badge/samlb" alt="Downloads">
-  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg" alt="Python"></a>
+  <a href="https://pypi.org/project/samlb/"><img src="https://img.shields.io/pypi/v/samlb.svg" alt="PyPI"></a>
+  <a href="https://pepy.tech/project/samlb"><img src="https://static.pepy.tech/badge/samlb" alt="Downloads"></a>
+  <a href="https://github.com/TechyNilesh/samlb/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
 </p>
 
 ---
