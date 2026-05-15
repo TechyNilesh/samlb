@@ -192,10 +192,23 @@ SAMLB uses **prequential evaluation** (test-then-train):
 
 ```
 results/
-  classification_10runs.csv       # Flat CSV: one row per (framework x dataset x run)
-  aggregate.json                  # Aggregated mean +/- std across runs
-  ASML_electricity_seed0.json     # Per-run JSON with full learning curves
+  classification/
+    summary.json                  # Flat JSON: one row per (framework x dataset x run)
+    <dataset>/<framework>/
+      run_00.json                 # Raw per-run JSON with full learning curves
+      ...
+      run_09.json
+      aggregate.json              # Aggregated mean +/- std across 10 runs
+  regression/
+    summary.json
+    <dataset>/<framework>/
+      run_00.json
+      ...
+      run_09.json
+      aggregate.json
 ```
+
+The released repository includes the raw JSON results used for the paper under `results/classification/` and `results/regression/`.
 
 ## Project Structure
 
@@ -220,6 +233,9 @@ results/
 │       ├── base/              # BaseStreamFramework + C++ wrappers
 │       ├── classification/    # ASML, AutoClass, EvoAutoML, OAML
 │       └── regression/        # ASML, ChaCha, EvoAutoML
+├── results/                   # Raw paper results as JSON files
+│   ├── classification/        # Classification run_*.json + aggregate.json
+│   └── regression/            # Regression run_*.json + aggregate.json
 ├── tests/                     # Test suite
 └── examples/                  # Benchmark runner scripts
     ├── run_benchmark.py       # Classification benchmark CLI
@@ -426,9 +442,9 @@ If you use SAMLB in your research, please cite:
 ```bibtex
 @software{samlb2024,
   title  = {SAMLB: Streaming AutoML Benchmark},
-  author = {Verma, Nilesh and Bifet, Albert and Pfahringer, Bernhard and Bahri, Maroua},
+  author = {Anonymous Authors},
   year   = {2026},
-  url    = {https://github.com/TechyNilesh/samlb}
+  url    = {Anonymous repository}
 }
 ```
 
