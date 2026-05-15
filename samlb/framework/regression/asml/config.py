@@ -1,10 +1,9 @@
 """
 ASML Regression — search space configuration.
 
-Base models use SAMLB C++ backends where available.
-River's AdaptiveRandomForestRegressor is kept as it has no C++ equivalent.
+Base models use SAMLB C++ backends.
 """
-from river import preprocessing, feature_selection, stats, forest
+from river import preprocessing, feature_selection, stats
 
 from samlb.framework.base._cpp_wrappers import (
     LinearRegression,
@@ -23,7 +22,6 @@ model_options = [
     PassiveAggressiveRegressor(),
     KNNRegressor(),
     HoeffdingTreeRegressor(),
-    forest.ARFRegressor(),   # River ARF — no C++ equivalent
 ]
 
 # ── preprocessing ─────────────────────────────────────────────────────────────
@@ -66,14 +64,6 @@ hyperparameters_options = {
         "tie_threshold":    range_gen(0.02, 0.08, step=0.01, float_n=True),
         "max_depth":        range_gen(10, 100, step=10),
         "learning_rate":    range_gen(0.001, 0.1, step=0.005, float_n=True),
-    },
-    # River ARF
-    "ARFRegressor": {
-        "n_models":          range_gen(3, 9, step=2),
-        "max_depth":         range_gen(5, 30, step=5),
-        "grace_period":      range_gen(50, 500, step=50),
-        "aggregation_method": ["mean", "median"],
-        "leaf_prediction":   ["mean", "model", "adaptive"],
     },
     # River preprocessors
     "MinMaxScaler":  {},
