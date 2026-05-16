@@ -2,6 +2,9 @@
 #include <cmath>
 #include <limits>
 
+// MSVC does not define M_PI by default; use a constexpr to stay portable.
+constexpr double SAMLB_PI = 3.14159265358979323846;
+
 // Incremental Gaussian sufficient statistics (Welford's algorithm).
 // Tracks n, mean, M2 for online variance computation.
 struct GaussianEstimator {
@@ -32,7 +35,7 @@ struct GaussianEstimator {
         if (var <= 0.0) return (x == mean) ? 1.0 : 0.0;
         double diff = x - mean;
         return std::exp(-0.5 * diff * diff / var) /
-               std::sqrt(2.0 * M_PI * var);
+               std::sqrt(2.0 * SAMLB_PI * var);
     }
 
     void reset() { n = 0.0; mean = 0.0; M2 = 0.0; }

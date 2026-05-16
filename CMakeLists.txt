@@ -8,7 +8,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
-add_compile_options(-O3 -march=native -ffast-math)
+if(MSVC)
+  add_compile_options(/O2 /fp:fast)
+else()
+  add_compile_options(-O3 -march=native -ffast-math)
+endif()
 
 # pybind11
 find_package(pybind11 CONFIG REQUIRED)
