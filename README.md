@@ -54,11 +54,21 @@ pip install "samlb[vw]"
 from samlb.benchmark import BenchmarkSuite
 from samlb.framework.classification.asml import AutoStreamClassifier
 from samlb.framework.classification.eaml import EvolutionaryBaggingClassifier
+from samlb.framework.random_search import RandomSearch
+from samlb.framework.classification.shared_config import (
+    SHARED_PREPROCESSORS, SHARED_CLASSIFIER_INSTANCES,
+)
 
 suite = BenchmarkSuite(
     models={
-        "ASML":      AutoStreamClassifier(seed=42),
-        "EvoAutoML": EvolutionaryBaggingClassifier(seed=42),
+        "ASML":         AutoStreamClassifier(seed=42),
+        "EvoAutoML":    EvolutionaryBaggingClassifier(seed=42),
+        # RandomSearch baseline over the same shared learner pool
+        "RandomSearch": RandomSearch(
+            scalers=SHARED_PREPROCESSORS,
+            models=SHARED_CLASSIFIER_INSTANCES,
+            seed=42,
+        ),
     },
     datasets=["electricity", "covertype"],
     task="classification",
@@ -69,6 +79,10 @@ suite.run()
 suite.print_table()
 suite.to_csv("results/classification.csv")
 ```
+
+> RandomSearch is task-agnostic: for regression, pass the regression pool
+> (`EAML_REG_PARAM_GRID["Scaler"]` / `["Regressor"]` from
+> `samlb.framework.regression.eaml.config`) and set `clip=True`.
 
 ### Dataset Streaming
 
@@ -120,6 +134,12 @@ python examples/run_regression.py --n_runs 5 --datasets bike california_housing
 | **ASML** | Adaptive Random Drift Nearby Search | Online target normalization (Welford), prediction clipping |
 | **ChaCha** | FLAML AutoVW | Vowpal Wabbit online HPO, progressive validation loss |
 | **EvoAutoML** | Evolutionary Bagging | Population-based ensemble, mutation-driven search |
+
+### Baseline (classification & regression)
+
+| Baseline | Strategy | Key Features |
+|----------|----------|--------------|
+| **RandomSearch** | Random per-window selection | Keeps the full shared learner pool warm, randomly picks one pipeline per exploration window |
 
 ## C++ Base Algorithms
 
@@ -224,13 +244,14 @@ The released repository includes the raw JSON results used for the paper under `
 │   ├── core/                  # Shared headers
 │   └── bindings/              # PyBind11 module
 ├── samlb/                     # Python package
-│   ├── __init__.py            # Version: 0.1.0
+│   ├── __init__.py            # Version: 0.3.0
 │   ├── algorithms/            # C++ algorithm Python bindings
 │   ├── benchmark/             # BenchmarkSuite orchestrator
 │   ├── evaluation/            # PrequentialEvaluator, metrics, results
 │   ├── datasets/              # 30 datasets (15 clf + 15 reg NPZ files)
 │   └── framework/             # AutoML framework implementations
 │       ├── base/              # BaseStreamFramework + C++ wrappers
+│       ├── random_search.py   # RandomSearch baseline (task-agnostic)
 │       ├── classification/    # ASML, AutoClass, EvoAutoML, OAML
 │       └── regression/        # ASML, ChaCha, EvoAutoML
 ├── results/                   # Raw paper results as JSON files
@@ -440,11 +461,12 @@ def test_reset():
 If you use SAMLB in your research, please cite:
 
 ```bibtex
-@software{samlb2024,
-  title  = {SAMLB: Streaming AutoML Benchmark},
-  author = {Anonymous Authors},
-  year   = {2026},
-  url    = {Anonymous repository}
+@inproceedings{verma2026samlb,
+  title     = {SAMLB: A Streaming AutoML Benchmark},
+  author    = {Verma, Nilesh and Bifet, Albert and Pfahringer, Bernhard and Bahri, Maroua},
+  booktitle = {Proceedings of the International Conference on Automated Machine Learning (AutoML)},
+  year      = {2026},
+  url       = {https://github.com/TechyNilesh/samlb}
 }
 ```
 

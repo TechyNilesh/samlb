@@ -36,4 +36,4 @@ Quick start
     suite.run()
     suite.print_table()
 """
-__version__ = "0.1.0"
+__version__ = "0.3.0"

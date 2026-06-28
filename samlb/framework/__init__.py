@@ -16,12 +16,17 @@ Regression
     from samlb.framework.regression.chacha import ChaChaRegressor
     from samlb.framework.regression.eaml import EvolutionaryBaggingRegressor
 
+Baselines (task-agnostic)
+-------------------------
+    from samlb.framework.random_search import RandomSearch
+
 All frameworks expose the same interface:
     model.predict_one(x: dict) -> label / float
     model.learn_one(x: dict, y) -> None
     model.reset() -> None
 """
 from .base._framework import BaseStreamFramework
+from .random_search import RandomSearch
 from .classification.asml.model import AutoStreamClassifier
 from .classification.autoclass.model import AutoClass
 from .classification.eaml.model import EvolutionaryBaggingClassifier
@@ -32,6 +37,8 @@ from .regression.eaml.model import EvolutionaryBaggingRegressor
 
 __all__ = [
     "BaseStreamFramework",
+    # baselines
+    "RandomSearch",
     # classification
     "AutoStreamClassifier",
     "AutoClass",
