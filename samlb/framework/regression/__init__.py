@@ -2,5 +2,11 @@
 from .asml.model import AutoStreamRegressor
 from .chacha.model import ChaChaRegressor
 from .eaml.model import EvolutionaryBaggingRegressor
+from .sag.model import StreamingAutoGluonRegressor
 
-__all__ = ["AutoStreamRegressor", "ChaChaRegressor", "EvolutionaryBaggingRegressor"]
+__all__ = [
+    "AutoStreamRegressor",
+    "ChaChaRegressor",
+    "EvolutionaryBaggingRegressor",
+    "StreamingAutoGluonRegressor",
+]

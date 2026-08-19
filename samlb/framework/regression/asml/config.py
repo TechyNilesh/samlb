@@ -3,7 +3,9 @@ ASML Regression — search space configuration.
 
 Base models use SAMLB C++ backends.
 """
-from river import preprocessing, feature_selection, stats
+from samlb.framework.base import (
+    MaxAbsScaler, MinMaxScaler, SelectKBest, StandardScaler, VarianceThreshold,
+)
 
 from samlb.framework.base._cpp_wrappers import (
     LinearRegression,
@@ -27,14 +29,14 @@ model_options = [
 # ── preprocessing ─────────────────────────────────────────────────────────────
 
 preprocessor_options = [
-    preprocessing.MinMaxScaler(),
-    preprocessing.MaxAbsScaler(),
+    MinMaxScaler(),
+    MaxAbsScaler(),
 ]
 
 # ── feature selection ─────────────────────────────────────────────────────────
 
 feature_selection_options = [
-    feature_selection.SelectKBest(similarity=stats.PearsonCorr()),
+    SelectKBest(),
 ]
 
 # ── hyperparameter search spaces ──────────────────────────────────────────────

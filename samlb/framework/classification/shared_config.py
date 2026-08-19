@@ -18,7 +18,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Dict, List, Optional
 
-from river import preprocessing
+from samlb.framework.base import MaxAbsScaler, MinMaxScaler, StandardScaler
 
 from samlb.framework.base._cpp_wrappers import (
     HoeffdingTreeClassifier,
@@ -36,9 +36,9 @@ from samlb.framework.classification.asml.helper import range_gen
 # Same for all frameworks.
 
 SHARED_PREPROCESSORS = [
-    preprocessing.MinMaxScaler(),
-    preprocessing.StandardScaler(),
-    preprocessing.MaxAbsScaler(),
+    MinMaxScaler(),
+    StandardScaler(),
+    MaxAbsScaler(),
 ]
 
 # ── Base classifier pool (one default instance per type) ──────────────────────
@@ -164,10 +164,10 @@ class ClassificationConfig:
     --------------------------------------------------------
         from samlb.framework.classification.shared_config import ClassificationConfig
         from samlb.framework.base._cpp_wrappers import HoeffdingTreeClassifier, Perceptron
-        from river import preprocessing
+        from samlb.framework.base import MaxAbsScaler, MinMaxScaler, StandardScaler
 
         cfg = ClassificationConfig(
-            scalers=[preprocessing.MinMaxScaler(), preprocessing.StandardScaler()],
+            scalers=[MinMaxScaler(), StandardScaler()],
             model_pool=[HoeffdingTreeClassifier(), Perceptron()],
             hyperparameters={
                 "HoeffdingTreeClassifier": {"grace_period": [100, 200, 500]},
@@ -193,6 +193,7 @@ class ClassificationConfig:
                 "AutoClass": AutoClass(config_dict=cfg.autoclass_config_dict(), seed=42),
                 "EvoAutoML": EvolutionaryBaggingClassifier(param_grid=cfg.eaml_param_grid(), seed=42),
                 "OAML":      OAMLClassifier(scalers=cfg.scalers, classifiers=cfg.classifier_instances, seed=42),
+                "StreamingAutoGluon": StreamingAutoGluon(**cfg.sag_kwargs(), seed=42),
             },
             datasets=["electricity"],
             task="classification",
@@ -208,14 +209,14 @@ class ClassificationConfig:
 
     def asml_config_dict(self) -> dict:
         """Config dict in the format AutoStreamClassifier expects."""
-        from river import feature_selection, stats
+        from samlb.framework.base import SelectKBest, VarianceThreshold
         from samlb.framework.classification.asml.helper import range_gen
         return {
             "models":          self.model_pool,
             "preprocessors":   self.scalers,
             "features": [
-                feature_selection.VarianceThreshold(threshold=0),
-                feature_selection.SelectKBest(similarity=stats.PearsonCorr()),
+                VarianceThreshold(threshold=0),
+                SelectKBest(),
             ],
             "hyperparameters": {
                 **self.hyperparameters,
@@ -241,6 +242,17 @@ class ClassificationConfig:
         return {
             "Scaler":     self.scalers,
             "Classifier": self.classifier_instances,
+        }
+
+    def sag_kwargs(self) -> dict:
+        """Keyword arguments in the format StreamingAutoGluon expects.
+
+        One base learner type per algorithm in the pool, with the shared
+        preprocessors handed out round-robin across those types.
+        """
+        return {
+            "learners": self.model_pool,
+            "scalers":  self.scalers,
         }
 
 

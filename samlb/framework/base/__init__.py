@@ -1,4 +1,4 @@
-"""samlb.framework.base — abstract base class and River-compatible C++ wrappers."""
+"""samlb.framework.base — abstract framework base and C++ component wrappers."""
 from ._framework import BaseStreamFramework
 from ._cpp_wrappers import (
     # classification
@@ -9,20 +9,33 @@ from ._cpp_wrappers import (
     SoftmaxRegression,
     KNNClassifier,
     HoeffdingTreeClassifier,
+    EFDTClassifier,
     SGTClassifier,
+    ARFClassifier,
     # regression
     LinearRegression,
     BayesianLinearRegression,
     PassiveAggressiveRegressor,
     KNNRegressor,
     HoeffdingTreeRegressor,
+    ARFRegressor,
+    # preprocessing / feature selection
+    StandardScaler,
+    MinMaxScaler,
+    MaxAbsScaler,
+    VarianceThreshold,
+    SelectKBest,
 )
 
 __all__ = [
     "BaseStreamFramework",
     "NaiveBayes", "Perceptron", "LogisticRegression",
     "PassiveAggressiveClassifier", "SoftmaxRegression",
-    "KNNClassifier", "HoeffdingTreeClassifier", "SGTClassifier",
+    "KNNClassifier", "HoeffdingTreeClassifier", "EFDTClassifier", "SGTClassifier",
+    "ARFClassifier",
     "LinearRegression", "BayesianLinearRegression",
     "PassiveAggressiveRegressor", "KNNRegressor", "HoeffdingTreeRegressor",
+    "ARFRegressor",
+    "StandardScaler", "MinMaxScaler", "MaxAbsScaler",
+    "VarianceThreshold", "SelectKBest",
 ]

@@ -1,11 +1,12 @@
 #pragma once
+#include "../core/estimator.h"
 #include <unordered_map>
 #include <string>
 #include <vector>
 #include <set>
 
 // Binary / multiclass logistic regression via SGD (one-vs-rest for multiclass).
-class LogisticRegression {
+class LogisticRegression : public IClassifier {
 public:
     explicit LogisticRegression(double learning_rate = 0.01, double l2 = 0.0);
     void learn_one(const std::unordered_map<std::string, double>& x, int y);

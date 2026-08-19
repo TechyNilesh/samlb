@@ -16,8 +16,8 @@ import random
 from collections import Counter
 
 import numpy as np
-from river import metrics
-from river.drift import ADWIN
+from samlb import metrics
+from samlb.metrics import ADWIN
 
 from samlb.framework.base._framework import BaseStreamFramework
 from .search import PipelineSearch

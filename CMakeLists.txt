@@ -9,9 +9,18 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 if(MSVC)
-  add_compile_options(/O2 /fp:fast)
+  add_compile_options(/O2)
 else()
-  add_compile_options(-O3 -march=native -ffast-math)
+  # NOTE: no -ffast-math. It implies -ffinite-math-only, under which the
+  # -inf sentinels used throughout the learners (softmax.cpp, naive_bayes.cpp,
+  # hoeffding_tree.cpp, ...) are undefined behaviour; the optimiser then folds
+  # comparisons against them inconsistently and results become unreproducible.
+  # -fno-math-errno keeps most of the speed without licensing that assumption.
+  add_compile_options(-O3 -march=native -fno-math-errno)
+  if(SAMLB_ASAN)
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g -O1)
+    add_link_options(-fsanitize=address)
+  endif()
 endif()
 
 # pybind11
@@ -33,6 +42,15 @@ set(CPP_SOURCES
     _cpp/regression/passive_aggressive_reg.cpp
     _cpp/regression/knn_reg.cpp
     _cpp/regression/hoeffding_tree_reg.cpp
+    _cpp/regression/arf_reg.cpp
+    _cpp/ensemble/arf_cls.cpp
+    _cpp/ensemble/srp_cls.cpp
+    _cpp/preprocessing/scalers.cpp
+    _cpp/preprocessing/feature_selection.cpp
+    _cpp/metrics/metrics.cpp
+    _cpp/drift/adwin.cpp
+    _cpp/drift/eddm.cpp
+    _cpp/pipeline/pipeline.cpp
     _cpp/bindings/pybind_module.cpp
 )
 

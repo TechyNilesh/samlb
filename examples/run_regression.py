@@ -37,6 +37,9 @@ from samlb.benchmark import BenchmarkSuite
 from samlb.framework.regression.asml import AutoStreamRegressor, default_config_dict as asml_cfg
 from samlb.framework.regression.chacha import ChaChaRegressor
 from samlb.framework.regression.eaml import EvolutionaryBaggingRegressor, EAML_REG_PARAM_GRID
+from samlb.framework.regression.sag import StreamingAutoGluonRegressor
+from samlb.framework.random_search import RandomSearch
+from samlb.framework.base import ARFRegressor
 
 
 def parse_args():
@@ -56,6 +59,12 @@ def _build_models(seed: int):
     models = {
         "ASML":      AutoStreamRegressor(config_dict=asml_cfg, seed=seed),
         "EvoAutoML": EvolutionaryBaggingRegressor(param_grid=EAML_REG_PARAM_GRID, seed=seed),
+        "StreamingAutoGluon": StreamingAutoGluonRegressor(seed=seed),
+        "RandomSearch": RandomSearch(scalers=EAML_REG_PARAM_GRID["Scaler"],
+                                     models=EAML_REG_PARAM_GRID["Regressor"],
+                                     seed=seed, clip=True),
+        # SOTA single-method baseline (not an AutoML search)
+        "ARF": ARFRegressor(n_models=10, seed=seed),
     }
     if ChaChaRegressor.is_available():
         models["ChaCha"] = ChaChaRegressor(seed=seed)

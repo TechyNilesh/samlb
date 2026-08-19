@@ -185,10 +185,13 @@ class PrequentialEvaluator:
                         y_pred = y_scaler.inverse_transform(float(y_pred))
 
                     # Clip predictions to a safe float range to prevent
-                    # OverflowError in squared-error metrics.
-                    _SAFE = 1e150
-                    if isinstance(y_pred, (int, float)):
-                        y_pred = max(-_SAFE, min(_SAFE, float(y_pred)))
+                    # OverflowError in squared-error metrics. Regression only:
+                    # class labels must stay integral for the classification
+                    # metrics.
+                    if self.task == "regression":
+                        _SAFE = 1e150
+                        if isinstance(y_pred, (int, float)):
+                            y_pred = max(-_SAFE, min(_SAFE, float(y_pred)))
                     for m in cumulative.values():
                         m.update(y_original, y_pred)
                     for m in window_live.values():

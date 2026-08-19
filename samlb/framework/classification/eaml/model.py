@@ -25,8 +25,9 @@ import copy
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-from river import metrics
+from samlb import metrics
 
+from samlb.base import Pipeline as _FusedPipeline
 from samlb.framework.base._framework import BaseStreamFramework
 from .config import EAML_CLF_PARAM_GRID
 
@@ -34,11 +35,20 @@ from .config import EAML_CLF_PARAM_GRID
 # ── Lightweight pipeline ──────────────────────────────────────────────────────
 
 class _Pipeline:
-    """A (scaler | classifier) pipeline supporting evolutionary mutation."""
+    """A (scaler | classifier) pipeline supporting evolutionary mutation.
+
+    The components are kept as attributes because mutation swaps them, but the
+    per-instance work runs through a fused C++ pipeline, so one instance
+    crosses into C++ once rather than once per stage.
+    """
 
     def __init__(self, scaler, classifier):
         self.scaler = copy.deepcopy(scaler)
         self.classifier = copy.deepcopy(classifier)
+        self._fuse()
+
+    def _fuse(self) -> None:
+        self._pipe = _FusedPipeline(self.scaler, self.classifier)
 
     def _set_params(self, params: dict) -> None:
         """Replace scaler or classifier component (mutation step)."""
@@ -46,19 +56,27 @@ class _Pipeline:
             self.scaler = copy.deepcopy(params["Scaler"])
         if "Classifier" in params:
             self.classifier = copy.deepcopy(params["Classifier"])
+        self._fuse()
+
+    def __deepcopy__(self, memo):
+        # Copy the components first, then rebuild the fused pipeline around
+        # *those* copies — a deepcopy of the fused object would not be wired to
+        # them.
+        new = _Pipeline.__new__(_Pipeline)
+        memo[id(self)] = new
+        new.scaler = copy.deepcopy(self.scaler, memo)
+        new.classifier = copy.deepcopy(self.classifier, memo)
+        new._fuse()
+        return new
 
     def predict_one(self, x: dict) -> Any:
-        x_t = self.scaler.transform_one(x)
-        return self.classifier.predict_one(x_t)
+        return self._pipe.predict_one(x)
 
     def predict_proba_one(self, x: dict) -> dict:
-        x_t = self.scaler.transform_one(x)
-        return self.classifier.predict_proba_one(x_t)
+        return self._pipe.predict_proba_one(x)
 
     def learn_one(self, x: dict, y: Any) -> "_Pipeline":
-        self.scaler.learn_one(x)
-        x_t = self.scaler.transform_one(x)
-        self.classifier.learn_one(x_t, y)
+        self._pipe.learn_one(x, y)
         return self
 
 

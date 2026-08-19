@@ -21,22 +21,26 @@ import copy
 import random
 from typing import Any, Dict, List, Optional
 
+from samlb.base import Pipeline as _FusedPipeline
 from samlb.framework.base._framework import BaseStreamFramework
 
 
 class _Pipe:
-    """A lightweight (scaler | model) pipeline kept warm online."""
+    """A lightweight (scaler | model) pipeline kept warm online.
+
+    Backed by a fused C++ pipeline: one Python->C++ crossing per instance.
+    """
 
     def __init__(self, scaler, model):
         self.scaler = copy.deepcopy(scaler)
         self.model = copy.deepcopy(model)
+        self._pipe = _FusedPipeline(self.scaler, self.model)
 
     def predict_one(self, x: Dict[str, float]) -> Any:
-        return self.model.predict_one(self.scaler.transform_one(x))
+        return self._pipe.predict_one(x)
 
     def learn_one(self, x: Dict[str, float], y: Any) -> None:
-        self.scaler.learn_one(x)
-        self.model.learn_one(self.scaler.transform_one(x), y)
+        self._pipe.learn_one(x, y)
 
 
 class RandomSearch(BaseStreamFramework):

@@ -1,8 +1,9 @@
 #pragma once
+#include "../core/estimator.h"
 #include <unordered_map>
 #include <string>
 
-class Perceptron {
+class Perceptron : public IClassifier {
 public:
     explicit Perceptron(double learning_rate = 0.01);
     void learn_one(const std::unordered_map<std::string, double>& x, int y);

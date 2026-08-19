@@ -51,11 +51,56 @@ HTNode* HoeffdingTreeClassifier::traverse(
 // update_leaf: accumulate statistics at a leaf
 // ---------------------------------------------------------------------------
 
+std::unordered_map<int, double> HoeffdingTreeClassifier::nb_log_proba(
+    const HTNode* node, const std::unordered_map<std::string, double>& x) const
+{
+    std::unordered_map<int, double> log_p;
+    const double n_total = node->total_weight;
+    if (n_total <= 0.0) return log_p;
+
+    for (const auto& [cls, cnt] : node->class_counts) {
+        double lp = std::log(cnt / n_total);
+        const auto it = node->stats.find(cls);
+        if (it != node->stats.end()) {
+            for (const auto& [feat, val] : x) {
+                const auto fit = it->second.find(feat);
+                if (fit != it->second.end()) {
+                    const double p = fit->second.probability_density(val);
+                    lp += std::log(p > 1e-300 ? p : 1e-300);
+                }
+            }
+        }
+        log_p[cls] = lp;
+    }
+    return log_p;
+}
+
+bool HoeffdingTreeClassifier::use_nb(const HTNode* node) const {
+    if (leaf_prediction == "mc") return false;
+    if (node->total_weight < static_cast<double>(nb_threshold)) return false;
+    if (leaf_prediction == "nb") return true;
+    return node->nb_correct > node->mc_correct;      // "nba"
+}
+
 void HoeffdingTreeClassifier::update_leaf(
     HTNode* node,
     const std::unordered_map<std::string, double>& x,
     int y)
 {
+    // Score both leaf predictors on this instance *before* learning from it,
+    // so the adaptive choice is based on out-of-sample performance.
+    if (leaf_prediction != "mc" && node->total_weight > 0.0) {
+        if (majority_class(node) == y) node->mc_correct += 1.0;
+        const auto log_p = nb_log_proba(node, x);
+        if (!log_p.empty()) {
+            int best = 0;
+            double best_lp = -std::numeric_limits<double>::infinity();
+            for (const auto& [cls, lp] : log_p)
+                if (lp > best_lp) { best_lp = lp; best = cls; }
+            if (best == y) node->nb_correct += 1.0;
+        }
+    }
+
     node->class_counts[y] += 1.0;
     node->total_weight     += 1.0;
     for (auto& [feat, val] : x)
@@ -204,6 +249,11 @@ int HoeffdingTreeClassifier::majority_class(const HTNode* node) const {
 // try_split: attempt to split a leaf using Hoeffding bound
 // ---------------------------------------------------------------------------
 
+void HoeffdingTreeClassifier::set_subspace(int size, unsigned int seed) {
+    subspace_size_ = size;
+    split_rng_.seed(seed);
+}
+
 void HoeffdingTreeClassifier::try_split(HTNode* node, int depth) {
     if (depth >= max_depth) return;
     if (node->total_weight < 2.0) return;
@@ -235,9 +285,20 @@ void HoeffdingTreeClassifier::try_split(HTNode* node, int depth) {
     std::string best_feature;
     double       best_threshold = 0.0;
 
-    for (const auto& feat : features) {
-        // Compute overall feature mean across all classes (weighted by class count)
-        double w_mean = 0.0, w_total = 0.0;
+    // Random subspace, resampled at every split attempt (ARF).
+    std::vector<std::string> candidates(features.begin(), features.end());
+    if (subspace_size_ > 0 && static_cast<int>(candidates.size()) > subspace_size_) {
+        std::shuffle(candidates.begin(), candidates.end(), split_rng_);
+        candidates.resize(static_cast<size_t>(subspace_size_));
+    }
+
+    for (const auto& feat : candidates) {
+        // Candidate thresholds. A single split point (the weighted mean) is far
+        // too coarse for a numeric attribute — a VFDT evaluates a range of
+        // candidates. Here the per-class Gaussian summaries give a mean and a
+        // spread, and n_split_points thresholds are laid out across
+        // [mean - 3sd, mean + 3sd] pooled over the classes at this leaf.
+        double w_mean = 0.0, w_var = 0.0, w_total = 0.0;
         for (auto& [cls, cnt] : node->class_counts) {
             auto it = node->stats.find(cls);
             if (it == node->stats.end()) continue;
@@ -247,19 +308,50 @@ void HoeffdingTreeClassifier::try_split(HTNode* node, int depth) {
             w_total += cnt;
         }
         if (w_total <= 0.0) continue;
-        double threshold = w_mean / w_total;
+        w_mean /= w_total;
 
-        double score = (split_criterion == "gini")
-                     ? gini(node, feat, threshold)
-                     : info_gain(node, feat, threshold);
+        // Pooled spread: within-class variance plus the spread of class means.
+        for (auto& [cls, cnt] : node->class_counts) {
+            auto it = node->stats.find(cls);
+            if (it == node->stats.end()) continue;
+            auto fit = it->second.find(feat);
+            if (fit == it->second.end() || fit->second.n <= 0.0) continue;
+            const double d = fit->second.mean - w_mean;
+            w_var += cnt * (fit->second.variance() + d * d);
+        }
+        const double sd = std::sqrt(w_var / w_total);
 
-        if (score > best_score) {
+        std::vector<double> thresholds;
+        if (sd <= 0.0 || n_split_points <= 1) {
+            thresholds.push_back(w_mean);
+        } else {
+            const double lo = w_mean - 3.0 * sd, hi = w_mean + 3.0 * sd;
+            const double step = (hi - lo) / (n_split_points + 1);
+            for (int t = 1; t <= n_split_points; ++t) thresholds.push_back(lo + t * step);
+        }
+
+        // Best threshold *for this feature*.
+        double feat_score = -std::numeric_limits<double>::infinity();
+        double feat_threshold = w_mean;
+        for (double threshold : thresholds) {
+            const double score = (split_criterion == "gini")
+                               ? gini(node, feat, threshold)
+                               : info_gain(node, feat, threshold);
+            if (score > feat_score) { feat_score = score; feat_threshold = threshold; }
+        }
+
+        // The Hoeffding bound compares the best attribute with the SECOND-BEST
+        // ATTRIBUTE. Ranking individual thresholds here instead would put two
+        // neighbouring cut points of the same feature in the top two slots,
+        // driving their difference to ~0 and firing the tie-break on every
+        // attempt — which splits the tree on noise.
+        if (feat_score > best_score) {
             second_best    = best_score;
-            best_score     = score;
+            best_score     = feat_score;
             best_feature   = feat;
-            best_threshold = threshold;
-        } else if (score > second_best) {
-            second_best = score;
+            best_threshold = feat_threshold;
+        } else if (feat_score > second_best) {
+            second_best = feat_score;
         }
     }
 
@@ -373,26 +465,13 @@ int HoeffdingTreeClassifier::predict_one(
     if (!root) return 0;
     HTNode* node = traverse(x);
 
-    // Use Naive Bayes at leaf if enough samples and nb_threshold > 0
-    if (nb_threshold > 0 && node->total_weight >= nb_threshold) {
-        int    best_cls  = 0;
-        double best_prob = -std::numeric_limits<double>::infinity();
-        double n_total   = node->total_weight;
-        for (auto& [cls, cnt] : node->class_counts) {
-            double log_p = std::log(cnt / n_total);
-            auto it = node->stats.find(cls);
-            if (it != node->stats.end()) {
-                for (auto& [feat, val] : x) {
-                    auto fit = it->second.find(feat);
-                    if (fit != it->second.end()) {
-                        double p = fit->second.probability_density(val);
-                        log_p += std::log(p > 1e-300 ? p : 1e-300);
-                    }
-                }
-            }
-            if (log_p > best_prob) { best_prob = log_p; best_cls = cls; }
-        }
-        return best_cls;
+    if (use_nb(node)) {
+        const auto log_p = nb_log_proba(node, x);
+        int    best     = majority_class(node);
+        double best_lp  = -std::numeric_limits<double>::infinity();
+        for (const auto& [cls, lp] : log_p)
+            if (lp > best_lp) { best_lp = lp; best = cls; }
+        return best;
     }
 
     return majority_class(node);
@@ -419,7 +498,7 @@ std::unordered_map<int, double> HoeffdingTreeClassifier::predict_proba_one(
         return proba;
     }
 
-    if (nb_threshold > 0 && node->total_weight >= nb_threshold) {
+    if (use_nb(node)) {
         // Naive Bayes probabilities
         double total_prob = 0.0;
         for (auto& [cls, cnt] : node->class_counts) {

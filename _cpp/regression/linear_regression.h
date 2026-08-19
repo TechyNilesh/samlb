@@ -1,9 +1,10 @@
 #pragma once
+#include "../core/estimator.h"
 #include <unordered_map>
 #include <string>
 
 // Online Linear Regression via SGD on MSE loss.
-class LinearRegression {
+class LinearRegression : public IRegressor {
 public:
     explicit LinearRegression(double learning_rate = 0.01, double l2 = 0.0);
     void   learn_one(const std::unordered_map<std::string, double>& x, double y);

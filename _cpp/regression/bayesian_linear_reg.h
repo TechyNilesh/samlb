@@ -1,11 +1,12 @@
 #pragma once
+#include "../core/estimator.h"
 #include <unordered_map>
 #include <string>
 #include <vector>
 
 // Online Bayesian Linear Regression.
 // Maintains posterior mean and precision matrix (diagonal approximation).
-class BayesianLinearRegression {
+class BayesianLinearRegression : public IRegressor {
 public:
     explicit BayesianLinearRegression(double alpha = 1.0, double beta = 1.0);
     void   learn_one(const std::unordered_map<std::string, double>& x, double y);

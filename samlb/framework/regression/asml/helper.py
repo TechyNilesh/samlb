@@ -1,5 +1,5 @@
 """Helper utilities for ASML Regression."""
-from river import metrics
+from samlb import metrics
 import numpy as np
 
 

@@ -7,7 +7,7 @@ The param_grid has two top-level keys:
 
 Using SAMLB C++ wrappers for maximum throughput.
 """
-from river import preprocessing
+from samlb.framework.base import MaxAbsScaler, MinMaxScaler, StandardScaler
 
 from samlb.framework.base._cpp_wrappers import (
     BayesianLinearRegression,
@@ -19,9 +19,9 @@ from samlb.framework.base._cpp_wrappers import (
 
 EAML_REG_PARAM_GRID: dict = {
     "Scaler": [
-        preprocessing.MinMaxScaler(),
-        preprocessing.StandardScaler(),
-        preprocessing.MaxAbsScaler(),
+        MinMaxScaler(),
+        StandardScaler(),
+        MaxAbsScaler(),
     ],
     "Regressor": [
         # Linear Regression variants

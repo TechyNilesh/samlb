@@ -2,7 +2,7 @@
 ASML Classification — search space configuration.
 Uses the shared C++ algorithm pool defined in shared_config.
 """
-from river import feature_selection, stats
+from samlb.framework.base import SelectKBest, VarianceThreshold
 
 from samlb.framework.classification.shared_config import (
     SHARED_HYPERPARAMETERS,
@@ -16,8 +16,8 @@ model_options        = SHARED_MODEL_POOL
 preprocessor_options = SHARED_PREPROCESSORS
 
 feature_selection_options = [
-    feature_selection.VarianceThreshold(threshold=0.01),
-    feature_selection.SelectKBest(similarity=stats.PearsonCorr()),
+    VarianceThreshold(threshold=0.01),
+    SelectKBest(),
 ]
 
 hyperparameters_options = {

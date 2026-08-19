@@ -1,10 +1,11 @@
 #pragma once
+#include "../core/estimator.h"
 #include <unordered_map>
 #include <string>
 #include <set>
 
 // Multiclass Softmax Regression via SGD.
-class SoftmaxRegression {
+class SoftmaxRegression : public IClassifier {
 public:
     explicit SoftmaxRegression(double learning_rate = 0.01, double l2 = 0.0);
     void learn_one(const std::unordered_map<std::string, double>& x, int y);

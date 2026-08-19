@@ -10,7 +10,8 @@ import random
 from typing import Any
 
 import numpy as np
-from river import metrics, forest
+from samlb import metrics
+from samlb.framework.base import ARFRegressor
 
 from samlb.framework.base._framework import BaseStreamFramework
 from .config import default_config_dict
@@ -72,7 +73,7 @@ class AutoClass(BaseStreamFramework):
         self._max_params = max(
             (len(v) for v in self._hyperparameters.values()), default=1
         )
-        self._meta = forest.ARFRegressor(seed=seed or 0)
+        self._meta = ARFRegressor(seed=seed or 0)
 
     # ── public interface ──────────────────────────────────────────────────────
 

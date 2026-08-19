@@ -48,10 +48,53 @@ HTRegNode* HoeffdingTreeRegressor::traverse(
 // update_leaf: accumulate statistics and update linear model via SGD
 // ---------------------------------------------------------------------------
 
+// How far outside the leaf's target spread the linear model may predict.
+static constexpr double LINEAR_CLAMP_SD = 3.0;
+
+double HoeffdingTreeRegressor::linear_predict(
+    const HTRegNode* node, const std::unordered_map<std::string, double>& x) const
+{
+    double z = node->bias;
+    for (const auto& [feat, val] : x) {
+        const auto wit = node->weights.find(feat);
+        if (wit == node->weights.end()) continue;
+        const auto fit = node->feat_stats.find(feat);
+        double xs = 0.0;
+        if (fit != node->feat_stats.end()) {
+            const double sd = fit->second.std_dev();
+            if (sd > 0.0) xs = (val - fit->second.mean) / sd;
+        }
+        z += wit->second * xs;
+    }
+    const double sd_y = node->target_stats.std_dev();
+    const double mu_y = node->target_stats.mean;
+    const double y_hat = mu_y + z * (sd_y > 0.0 ? sd_y : 1.0);
+
+    // Bound the extrapolation to the leaf's own target distribution. A leaf
+    // trained on repeated copies of one instance (EvoAutoML resamples each
+    // instance Poisson(6) times) can otherwise emit a single wild value; the
+    // absolute error stays small but one squared-error spike is enough to sink
+    // R^2 for a whole run.
+    if (sd_y > 0.0) {
+        const double lo = mu_y - LINEAR_CLAMP_SD * sd_y;
+        const double hi = mu_y + LINEAR_CLAMP_SD * sd_y;
+        return std::max(lo, std::min(hi, y_hat));
+    }
+    return y_hat;
+}
+
 void HoeffdingTreeRegressor::update_leaf(
     HTRegNode* node,
     const std::unordered_map<std::string, double>& x, double y)
 {
+    // Score both leaf predictors on this instance *before* learning from it.
+    if (node->n > 0) {
+        const double dm = y - node->target_stats.mean;
+        node->mean_sse += dm * dm;
+        const double dl = y - linear_predict(node, x);
+        node->lin_sse  += dl * dl;
+    }
+
     node->target_stats.update(y);
     node->total_weight += 1.0;
     node->n            += 1;
@@ -59,19 +102,34 @@ void HoeffdingTreeRegressor::update_leaf(
     for (auto& [feat, val] : x)
         node->feat_stats[feat].update(val);
 
-    // Online SGD update for the leaf linear model (MSE loss)
-    // with gradient clipping to prevent divergence on high-dim data.
-    static constexpr double GRAD_CLIP = 10.0;
-    double y_hat = node->bias;
-    for (auto& [feat, val] : x) {
-        auto it = node->weights.find(feat);
-        if (it != node->weights.end()) y_hat += it->second * val;
+    // SGD in standardised space. The clip is now in standard deviations, so it
+    // means the same thing whatever the target's magnitude.
+    static constexpr double GRAD_CLIP = 3.0;
+    const double sd_y = node->target_stats.std_dev();
+    if (sd_y <= 0.0) return;                     // target constant so far
+
+    const double ys = (y - node->target_stats.mean) / sd_y;
+
+    double z = node->bias;
+    std::vector<std::pair<const std::string*, double>> scaled;
+    scaled.reserve(x.size());
+    for (const auto& [feat, val] : x) {
+        const auto fit = node->feat_stats.find(feat);
+        double xs = 0.0;
+        if (fit != node->feat_stats.end()) {
+            const double sd = fit->second.std_dev();
+            if (sd > 0.0) xs = (val - fit->second.mean) / sd;
+        }
+        scaled.emplace_back(&feat, xs);
+        const auto wit = node->weights.find(feat);
+        if (wit != node->weights.end()) z += wit->second * xs;
     }
-    double err = y - y_hat;
+
+    double err = ys - z;
     err = std::max(-GRAD_CLIP, std::min(GRAD_CLIP, err));
-    for (auto& [feat, val] : x) {
-        double grad = std::max(-GRAD_CLIP, std::min(GRAD_CLIP, err * val));
-        node->weights[feat] += learning_rate * grad;
+    for (const auto& [feat_ptr, xs] : scaled) {
+        const double grad = std::max(-GRAD_CLIP, std::min(GRAD_CLIP, err * xs));
+        node->weights[*feat_ptr] += learning_rate * grad;
     }
     node->bias += learning_rate * err;
 }
@@ -292,17 +350,16 @@ double HoeffdingTreeRegressor::predict_one(
     if (!root) return 0.0;
     HTRegNode* node = traverse(x);
 
-    // Use linear model once we have enough data (at least grace_period samples)
-    if (node->n >= grace_period) {
-        double y_hat = node->bias;
-        for (auto& [feat, val] : x) {
-            auto it = node->weights.find(feat);
-            if (it != node->weights.end())
-                y_hat += it->second * val;
-        }
-        return y_hat;
+    if (leaf_prediction == "mean") return node->target_stats.mean;
+
+    const bool warm = node->n >= grace_period;
+    if (leaf_prediction == "linear") {
+        return warm ? linear_predict(node, x) : node->target_stats.mean;
     }
 
-    // Fall back to target mean
+    // "adaptive": use the linear model only once it is warm AND has actually
+    // been beating the leaf mean. A diverging linear model can no longer
+    // destroy the leaf.
+    if (warm && node->lin_sse < node->mean_sse) return linear_predict(node, x);
     return node->target_stats.mean;
 }

@@ -1,11 +1,12 @@
 #pragma once
+#include "../core/estimator.h"
 #include <unordered_map>
 #include <string>
 #include <set>
 
 // Passive Aggressive Classifier (PA-I variant, Crammer et al. JMLR 2006).
 // Supports binary and multiclass (one-vs-rest).
-class PassiveAggressiveClassifier {
+class PassiveAggressiveClassifier : public IClassifier {
 public:
     explicit PassiveAggressiveClassifier(double C = 1.0);
     void learn_one(const std::unordered_map<std::string, double>& x, int y);

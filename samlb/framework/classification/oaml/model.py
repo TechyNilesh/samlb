@@ -42,9 +42,10 @@ import copy
 from typing import Any, Deque, List, Optional, Tuple
 
 import numpy as np
-from river import metrics
-from river.drift.binary import EDDM as _EDDM
+from samlb import metrics
+from samlb.metrics import EDDM as _EDDM
 
+from samlb.base import Pipeline as _FusedPipeline
 from samlb.framework.base._framework import BaseStreamFramework
 from .config import OAML_CLASSIFIERS, OAML_HYPERPARAMETERS, OAML_SCALERS
 
@@ -55,24 +56,32 @@ Genome = Tuple[Any, Any]
 # ── Lightweight pipeline ──────────────────────────────────────────────────────
 
 class _Pipeline:
-    """A (scaler | classifier) pipeline."""
+    """A (scaler | classifier) pipeline, fused on the C++ side."""
 
     def __init__(self, scaler, classifier):
         self.scaler = copy.deepcopy(scaler)
         self.classifier = copy.deepcopy(classifier)
+        self._fuse()
+
+    def _fuse(self) -> None:
+        self._pipe = _FusedPipeline(self.scaler, self.classifier)
+
+    def __deepcopy__(self, memo):
+        new = _Pipeline.__new__(_Pipeline)
+        memo[id(self)] = new
+        new.scaler = copy.deepcopy(self.scaler, memo)
+        new.classifier = copy.deepcopy(self.classifier, memo)
+        new._fuse()
+        return new
 
     def predict_one(self, x: dict) -> Any:
-        x_t = self.scaler.transform_one(x)
-        return self.classifier.predict_one(x_t)
+        return self._pipe.predict_one(x)
 
     def predict_proba_one(self, x: dict) -> dict:
-        x_t = self.scaler.transform_one(x)
-        return self.classifier.predict_proba_one(x_t)
+        return self._pipe.predict_proba_one(x)
 
     def learn_one(self, x: dict, y: Any) -> "_Pipeline":
-        self.scaler.learn_one(x)
-        x_t = self.scaler.transform_one(x)
-        self.classifier.learn_one(x_t, y)
+        self._pipe.learn_one(x, y)
         return self
 
 

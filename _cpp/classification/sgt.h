@@ -1,4 +1,5 @@
 #pragma once
+#include "../core/estimator.h"
 #include <unordered_map>
 #include <string>
 #include <memory>
@@ -28,7 +29,7 @@ struct SGTNode {
     std::unique_ptr<SGTNode> right;
 };
 
-class SGTClassifier {
+class SGTClassifier : public IClassifier {
 public:
     SGTClassifier(
         double learning_rate = 0.1,

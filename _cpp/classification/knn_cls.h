@@ -1,9 +1,10 @@
 #pragma once
+#include "../core/estimator.h"
 #include <unordered_map>
 #include <string>
 #include "../core/sliding_window.h"
 
-class KNNClassifier {
+class KNNClassifier : public IClassifier {
 public:
     explicit KNNClassifier(int n_neighbors = 5, int window_size = 1000, int p = 2);
     void learn_one(const std::unordered_map<std::string, double>& x, int y);

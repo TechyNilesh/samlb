@@ -1,5 +1,5 @@
 """Helper utilities for ASML Classification."""
-from river import metrics
+from samlb import metrics
 import numpy as np
 
 

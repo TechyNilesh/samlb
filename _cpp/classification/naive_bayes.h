@@ -1,10 +1,11 @@
 #pragma once
+#include "../core/estimator.h"
 #include <unordered_map>
 #include <string>
 #include <limits>
 #include "../core/gaussian_estimator.h"
 
-class NaiveBayes {
+class NaiveBayes : public IClassifier {
 public:
     using Features = std::unordered_map<std::string, double>;
 

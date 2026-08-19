@@ -18,8 +18,9 @@ import statistics
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-from river import metrics
+from samlb import metrics
 
+from samlb.base import Pipeline as _FusedPipeline
 from samlb.framework.base._framework import BaseStreamFramework
 from .config import EAML_REG_PARAM_GRID
 
@@ -32,21 +33,31 @@ class _Pipeline:
     def __init__(self, scaler, regressor):
         self.scaler = copy.deepcopy(scaler)
         self.regressor = copy.deepcopy(regressor)
+        self._fuse()
+
+    def _fuse(self) -> None:
+        self._pipe = _FusedPipeline(self.scaler, self.regressor)
 
     def _set_params(self, params: dict) -> None:
         if "Scaler" in params:
             self.scaler = copy.deepcopy(params["Scaler"])
         if "Regressor" in params:
             self.regressor = copy.deepcopy(params["Regressor"])
+        self._fuse()
+
+    def __deepcopy__(self, memo):
+        new = _Pipeline.__new__(_Pipeline)
+        memo[id(self)] = new
+        new.scaler = copy.deepcopy(self.scaler, memo)
+        new.regressor = copy.deepcopy(self.regressor, memo)
+        new._fuse()
+        return new
 
     def predict_one(self, x: dict) -> Optional[float]:
-        x_t = self.scaler.transform_one(x)
-        return self.regressor.predict_one(x_t)
+        return self._pipe.predict_one(x)
 
     def learn_one(self, x: dict, y: float) -> "_Pipeline":
-        self.scaler.learn_one(x)
-        x_t = self.scaler.transform_one(x)
-        self.regressor.learn_one(x_t, y)
+        self._pipe.learn_one(x, y)
         return self
 
 

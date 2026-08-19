@@ -1,18 +1,18 @@
 """
 samlb.evaluation.metrics
 ~~~~~~~~~~~~~~~~~~~~~~~~
-Factory functions that produce fresh River metric dicts per task type.
+Factory functions that produce fresh metric dicts per task type.
 One dict of live metric objects is maintained per run; all are updated
 together in the inner prequential loop.
 """
 from __future__ import annotations
 
 from typing import Dict
-from river import metrics as _m
+from samlb import metrics as _m
 
 
 def classification_metrics() -> Dict[str, object]:
-    """Fresh River metric objects for classification.
+    """Fresh metric objects for classification.
     Keys: accuracy, f1, precision, recall  (F1/precision/recall are Macro).
     """
     return {
@@ -24,7 +24,7 @@ def classification_metrics() -> Dict[str, object]:
 
 
 def regression_metrics() -> Dict[str, object]:
-    """Fresh River metric objects for regression.
+    """Fresh metric objects for regression.
     Keys: mae, rmse, r2
     """
     return {

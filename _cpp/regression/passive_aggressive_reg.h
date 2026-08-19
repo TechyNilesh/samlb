@@ -1,9 +1,10 @@
 #pragma once
+#include "../core/estimator.h"
 #include <unordered_map>
 #include <string>
 
 // Passive Aggressive Regressor (PA-I, epsilon-insensitive loss).
-class PassiveAggressiveRegressor {
+class PassiveAggressiveRegressor : public IRegressor {
 public:
     explicit PassiveAggressiveRegressor(double C = 1.0, double epsilon = 0.1);
     void   learn_one(const std::unordered_map<std::string, double>& x, double y);
