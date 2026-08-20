@@ -84,7 +84,7 @@ class R2(_Metric):
 class WindowMetric:
     """Accuracy / macro-F1 over a sliding window of predictions (C++ backend).
 
-    Used by StreamingAutoGluon to weight each stacked learner's vote.
+    Useful for weighting an ensemble member's vote by its recent accuracy.
     """
 
     METRIC_ACCURACY = 0
@@ -119,8 +119,8 @@ class WindowMetric:
 class WindowRegressionMetric:
     """MAE / RMSE over a sliding window of predictions (C++ backend).
 
-    The regression counterpart of :class:`WindowMetric`; used by
-    StreamingAutoGluonRegressor to weight each stacked regressor's prediction.
+    The regression counterpart of :class:`WindowMetric`; useful for
+    weighting an ensemble member's prediction by its recent error.
     """
 
     METRIC_MAE = 0

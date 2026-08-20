@@ -54,7 +54,6 @@ pip install "samlb[vw]"
 from samlb.benchmark import BenchmarkSuite
 from samlb.framework.classification.asml import AutoStreamClassifier
 from samlb.framework.classification.eaml import EvolutionaryBaggingClassifier
-from samlb.framework.classification.sag import StreamingAutoGluon
 from samlb.framework.random_search import RandomSearch
 from samlb.framework.classification.shared_config import (
     SHARED_PREPROCESSORS, SHARED_CLASSIFIER_INSTANCES,
@@ -64,7 +63,6 @@ suite = BenchmarkSuite(
     models={
         "ASML":         AutoStreamClassifier(seed=42),
         "EvoAutoML":    EvolutionaryBaggingClassifier(seed=42),
-        "StreamingAutoGluon": StreamingAutoGluon(seed=42),
         # RandomSearch baseline over the same shared learner pool
         "RandomSearch": RandomSearch(
             scalers=SHARED_PREPROCESSORS,
@@ -128,7 +126,6 @@ python examples/run_regression.py --n_runs 5 --datasets bike california_housing
 | **AutoClass** | Genetic Algorithm + Meta-Regressor | Fitness-proportionate selection, ARF surrogate for HP mutation |
 | **EvoAutoML** | Evolutionary Bagging | Population-based, tournament selection, Poisson(6) sampling |
 | **OAML** | Drift-triggered Random Search | EDDM drift detector, warm-up phase, random search |
-| **StreamingAutoGluon** | Online stacking of k-fold CV learners | k-fold cross-validated base learners feeding out-of-fold meta features to per-type stacked learners, votes weighted by windowed accuracy / macro-F1 |
 
 ### Regression
 
@@ -137,73 +134,12 @@ python examples/run_regression.py --n_runs 5 --datasets bike california_housing
 | **ASML** | Adaptive Random Drift Nearby Search | Online target normalization (Welford), prediction clipping |
 | **ChaCha** | FLAML AutoVW | Vowpal Wabbit online HPO, progressive validation loss |
 | **EvoAutoML** | Evolutionary Bagging | Population-based ensemble, mutation-driven search |
-| **StreamingAutoGluon** | Online stacking of k-fold CV learners | Out-of-fold meta features from k-fold cross-validated regressors, stacked predictions weighted by inverse windowed MAE / RMSE |
 
 ### Baseline (classification & regression)
 
 | Baseline | Strategy | Key Features |
 |----------|----------|--------------|
 | **RandomSearch** | Random per-window selection | Keeps the full shared learner pool warm, randomly picks one pipeline per exploration window |
-
-### StreamingAutoGluon
-
-Online stacking, implementing the method from its original Java reference
-implementation (`StreamingAutoGluon.java`).
-
-For each of `T` base learner types, `k + 1` learners are built. The `k` **fold
-learners** are trained with online k-fold cross-validation — the learner whose
-index equals `instances_seen % k` is held out from the current instance — and
-always see the raw features. The remaining **stacked learner** is trained on
-the instance augmented with the average class-probability prediction of all
-fold learners of every type; because every fold learner predicts before any of
-them is trained on that instance, the meta features stay out-of-fold. At
-prediction time the stacked learners' votes are combined, each weighted by its
-accuracy or macro-F1 over a sliding window.
-
-Base learners and preprocessors both come from the same shared pool every other
-framework searches — one base type per algorithm in `SHARED_MODEL_POOL`, with
-`SHARED_PREPROCESSORS` handed out round-robin across those types.
-
-```python
-from samlb.framework.classification.sag import StreamingAutoGluon, SAG_BASE_LEARNERS_SMALL
-from samlb.framework.classification.shared_config import DEFAULT_CLASSIFICATION_CONFIG as cfg
-
-model = StreamingAutoGluon(
-    **cfg.sag_kwargs(),     # learners + scalers from the shared pool (the default)
-    n_folds=3,              # k  (-k in the Java reference)
-    metric="accuracy",      # or "f1"  (-m in the Java reference)
-    window_size=1000,       # (-w in the Java reference)
-    seed=42,
-)
-
-# cheaper: 3 base types instead of the full pool
-fast = StreamingAutoGluon(learners=SAG_BASE_LEARNERS_SMALL, seed=42)
-
-# raw features, as the Java reference does
-raw = StreamingAutoGluon(scalers=None, seed=42)
-```
-
-Cost scales with `len(learners) * (n_folds + 1)`, so the base-type list is the
-main accuracy/speed dial. Two deviations from the Java reference: the base types
-are drawn from the shared SAMLB C++ pool rather than ARF/ARTE/SORE, and the
-class set is discovered online instead of being read from an ARFF header, so the meta-feature block grows as labels appear.
-
-A regression counterpart is available as
-`samlb.framework.regression.sag.StreamingAutoGluonRegressor`. The structure is
-identical; only the two class-specific pieces change — each base type
-contributes one meta feature (the average prediction of its fold learners)
-instead of one per class, and the stacked regressors are weighted by
-`1 / (eps + windowed MAE or RMSE)` so lower error earns a larger share.
-
-```python
-from samlb.framework.regression.sag import StreamingAutoGluonRegressor
-
-model = StreamingAutoGluonRegressor(n_folds=3, metric="mae", clip=True, seed=42)
-```
-
-Note that StreamingAutoGluon is deterministic (the Java reference reports
-`isRandomizable() == false`), so repeated runs with different seeds give
-identical results and its standard deviation across runs is always zero.
 
 ## C++ Base Algorithms
 

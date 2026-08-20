@@ -193,7 +193,6 @@ class ClassificationConfig:
                 "AutoClass": AutoClass(config_dict=cfg.autoclass_config_dict(), seed=42),
                 "EvoAutoML": EvolutionaryBaggingClassifier(param_grid=cfg.eaml_param_grid(), seed=42),
                 "OAML":      OAMLClassifier(scalers=cfg.scalers, classifiers=cfg.classifier_instances, seed=42),
-                "StreamingAutoGluon": StreamingAutoGluon(**cfg.sag_kwargs(), seed=42),
             },
             datasets=["electricity"],
             task="classification",
@@ -243,18 +242,6 @@ class ClassificationConfig:
             "Scaler":     self.scalers,
             "Classifier": self.classifier_instances,
         }
-
-    def sag_kwargs(self) -> dict:
-        """Keyword arguments in the format StreamingAutoGluon expects.
-
-        One base learner type per algorithm in the pool, with the shared
-        preprocessors handed out round-robin across those types.
-        """
-        return {
-            "learners": self.model_pool,
-            "scalers":  self.scalers,
-        }
-
 
 # ── Default config (the shared C++ pool) ──────────────────────────────────────
 

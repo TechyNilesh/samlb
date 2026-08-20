@@ -72,7 +72,7 @@ private:
 };
 
 // Accuracy / macro-F1 of a learner over a sliding window of predictions.
-// Used by StreamingAutoGluon to weight each stacked learner's vote.
+// Useful for weighting an ensemble member's vote by its recent accuracy.
 //
 // Unlike the MOA original the class count is not known up front (a stream does
 // not announce it), so the per-class counters grow as labels are observed.
@@ -103,7 +103,7 @@ private:
 };
 
 // Sliding-window MAE / RMSE — the regression counterpart of WindowMetric,
-// used to weight the stacked regressors of StreamingAutoGluon.
+// used to weight ensemble members by their recent error.
 class WindowRegressionMetric {
 public:
     explicit WindowRegressionMetric(int window_size = 1000);

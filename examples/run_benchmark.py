@@ -38,7 +38,6 @@ from samlb.framework.classification.asml      import AutoStreamClassifier, defau
 from samlb.framework.classification.autoclass import AutoClass, default_config_dict as ac_cfg
 from samlb.framework.classification.eaml      import EvolutionaryBaggingClassifier, EAML_CLF_PARAM_GRID
 from samlb.framework.classification.oaml      import OAMLClassifier, OAML_SCALERS, OAML_CLASSIFIERS
-from samlb.framework.classification.sag       import StreamingAutoGluon
 from samlb.framework.random_search            import RandomSearch
 from samlb.framework.base                     import ARFClassifier
 from samlb.framework.classification.shared_config import SHARED_CLASSIFIER_INSTANCES
@@ -64,7 +63,6 @@ def _build_models(seed: int):
         "AutoClass": AutoClass(config_dict=ac_cfg, seed=seed),
         "EvoAutoML": EvolutionaryBaggingClassifier(param_grid=EAML_CLF_PARAM_GRID, seed=seed),
         "OAML":      OAMLClassifier(scalers=OAML_SCALERS, classifiers=OAML_CLASSIFIERS, seed=seed),
-        "StreamingAutoGluon": StreamingAutoGluon(**DEFAULT_CLASSIFICATION_CONFIG.sag_kwargs(), seed=seed),
         "RandomSearch": RandomSearch(scalers=DEFAULT_CLASSIFICATION_CONFIG.scalers,
                                      models=SHARED_CLASSIFIER_INSTANCES, seed=seed),
         # SOTA single-method baseline (not an AutoML search)
