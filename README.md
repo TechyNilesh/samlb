@@ -333,6 +333,9 @@ The released repository includes the raw JSON results used for the paper under `
 ├── CMakeLists.txt             # C++ build configuration
 ├── LICENSE                    # MIT License
 ├── README.md                  # This file
+├── CONTRIBUTING.md            # Contributor guide
+├── wiki/                      # Wiki page sources (published to the GitHub wiki)
+├── scripts/                   # publish_wiki.sh
 ├── _cpp/                      # C++ source (9 classifiers, 5 regressors)
 │   ├── classification/
 │   ├── regression/
@@ -362,196 +365,54 @@ The released repository includes the raw JSON results used for the paper under `
 
 ---
 
+## Documentation
+
+Full usage documentation lives in the [SAMLB wiki](https://github.com/TechyNilesh/samlb/wiki):
+
+| Page | What it covers |
+|------|----------------|
+| [Installation](https://github.com/TechyNilesh/samlb/wiki/Installation) | Install, optional backends, build troubleshooting |
+| [Quick Start](https://github.com/TechyNilesh/samlb/wiki/Quick-Start) | First benchmark, the model contract, CLI |
+| [Benchmark API](https://github.com/TechyNilesh/samlb/wiki/Benchmark-API) | `BenchmarkSuite`, evaluator, `RunResult`, output formats |
+| [Datasets](https://github.com/TechyNilesh/samlb/wiki/Datasets) | The 30 bundled streams, and adding your own |
+| [Frameworks](https://github.com/TechyNilesh/samlb/wiki/Frameworks) | The bundled AutoML methods and their configuration |
+| [Base Algorithms](https://github.com/TechyNilesh/samlb/wiki/Base-Algorithms) | C++ learners, fused pipelines, metrics, drift detectors |
+| [External Algorithms](https://github.com/TechyNilesh/samlb/wiki/External-Algorithms) | Benchmarking River and CapyMOA learners |
+| [Extending SAMLB](https://github.com/TechyNilesh/samlb/wiki/Extending-SAMLB) | Writing a framework, adapter, dataset or C++ learner |
+| [FAQ](https://github.com/TechyNilesh/samlb/wiki/FAQ) | Common questions and failure modes |
+
+The pages are version-controlled in [`wiki/`](wiki/) — edit them there and open
+a PR; `./scripts/publish_wiki.sh` pushes them to the wiki.
+
+---
+
 ## Contributing
 
-We welcome contributions! Whether you are adding a new AutoML framework, new datasets, or fixing bugs.
-
-### Development Setup
+Contributions are welcome — a new streaming AutoML framework, a dataset, an
+adapter for another library, a bug fix, or a documentation correction.
 
 ```bash
 git clone https://github.com/TechyNilesh/samlb.git
 cd samlb
 pip install -e ".[dev]"
-```
-
-### Running Tests
-
-```bash
 pytest tests/
-```
-
-### Code Style
-
-```bash
 ruff check samlb/
-ruff format samlb/
 ```
 
----
-
-### Adding a New Streaming AutoML Framework
-
-This is the primary way to contribute. Every framework in SAMLB implements the same 3-method interface, making it easy to add your own.
-
-#### Step 1 -- Create your framework directory
-
-```
-samlb/framework/classification/my_method/    # (or regression/)
-    __init__.py
-    model.py
-    config.py        # optional: search space / hyperparameter config
-```
-
-#### Step 2 -- Implement `BaseStreamFramework`
+Adding a framework means implementing three methods:
 
 ```python
-# samlb/framework/classification/my_method/model.py
-
-from __future__ import annotations
-from typing import Any, Dict
 from samlb.framework.base import BaseStreamFramework
 
-
 class MyStreamingAutoML(BaseStreamFramework):
-    """My new streaming AutoML method."""
-
-    def __init__(self, seed: int = 42, exploration_window: int = 1000, budget: int = 10):
-        self.seed = seed
-        self.exploration_window = exploration_window
-        self.budget = budget
-        self._init_state()
-
-    def predict_one(self, x: Dict[str, float]) -> Any:
-        """
-        Return prediction for one instance BEFORE learning.
-
-        x : dict mapping feature_name -> float value
-        Returns: class label (int) for classification, value (float) for regression
-        """
-        return self._current_model_predict(x)
-
-    def learn_one(self, x: Dict[str, float], y: Any) -> None:
-        """
-        Update the model with one labelled instance.
-
-        This is where your AutoML logic lives:
-        - Update base learners
-        - Evaluate pipeline candidates
-        - Detect drift and adapt
-        - Explore new configurations
-        """
-        self._update(x, y)
-
-    def reset(self) -> None:
-        """Reset to initial untrained state (called before each run)."""
-        self._init_state()
+    def predict_one(self, x): ...   # predict BEFORE learning
+    def learn_one(self, x, y): ...  # your AutoML logic lives here
+    def reset(self): ...            # back to untrained; called before every run
 ```
 
-#### Step 3 -- Register in `__init__.py`
-
-```python
-# samlb/framework/classification/__init__.py
-
-from .my_method.model import MyStreamingAutoML
-
-__all__ = [
-    "AutoStreamClassifier",
-    "AutoClass",
-    "EvolutionaryBaggingClassifier",
-    "OAMLClassifier",
-    "MyStreamingAutoML",       # <-- add here
-]
-```
-
-#### Step 4 -- Use available building blocks
-
-SAMLB provides the full set of C++ components as building blocks:
-
-```python
-# Learners, preprocessing and feature selection (all C++)
-from samlb.framework.base import (
-    NaiveBayes,
-    Perceptron,
-    LogisticRegression,
-    HoeffdingTreeClassifier,
-    KNNClassifier,
-    SGTClassifier,
-    MinMaxScaler,
-    StandardScaler,
-    VarianceThreshold,
-    SelectKBest,
-)
-
-# Metrics and drift detection (also C++)
-from samlb.metrics import Accuracy, MAE, ADWIN, EDDM
-
-# Compose a pipeline with the | operator; the chain is fused into one C++ object
-pipeline = MinMaxScaler() | HoeffdingTreeClassifier(grace_period=200)
-pipeline.predict_one(x)
-pipeline.learn_one(x, y)
-```
-
-#### Step 5 -- Run it in the benchmark
-
-```python
-from samlb.benchmark import BenchmarkSuite
-from samlb.framework.classification.my_method import MyStreamingAutoML
-
-suite = BenchmarkSuite(
-    models={
-        "MyMethod": MyStreamingAutoML(seed=42),
-    },
-    datasets=["electricity", "covertype", "insects"],
-    task="classification",
-    n_runs=10,
-)
-suite.run()
-suite.print_table()
-```
-
-#### Step 6 -- Add tests
-
-```python
-# tests/test_my_method.py
-
-from samlb.framework.classification.my_method import MyStreamingAutoML
-from samlb.datasets import stream
-
-
-def test_predict_and_learn():
-    model = MyStreamingAutoML(seed=42)
-    for x, y in stream("electricity", task="classification", max_samples=500):
-        pred = model.predict_one(x)
-        model.learn_one(x, y)
-    assert pred is not None
-
-
-def test_reset():
-    model = MyStreamingAutoML(seed=42)
-    for x, y in stream("electricity", task="classification", max_samples=100):
-        model.learn_one(x, y)
-    model.reset()
-    # Should be back to untrained state
-```
-
-### Adding a New Dataset
-
-1. Prepare your data as a NumPy NPZ file with this schema:
-   - `X` -- `float32` array of shape `(n_samples, n_features)`
-   - `y` -- `int32` (classification) or `float32` (regression) array of shape `(n_samples,)`
-   - `feature_names` -- string array of shape `(n_features,)`
-   - `target_name` -- string scalar
-2. Place the `.npz` file in `samlb/datasets/classification/` or `samlb/datasets/regression/`
-3. It will be automatically discovered by `list_datasets()` and `load()`
-
-### PR Checklist
-
-- [ ] Code passes `ruff check samlb/`
-- [ ] Tests pass with `pytest tests/`
-- [ ] New framework implements all 3 methods of `BaseStreamFramework`
-- [ ] Include a brief description of the AutoML strategy
-- [ ] Reference any papers if applicable
-- [ ] Include benchmark results on at least 3 datasets
+[**CONTRIBUTING.md**](CONTRIBUTING.md) has the full walkthrough — development
+setup, rebuilding the C++ extension, the step-by-step guide to adding a
+framework, dataset, adapter or C++ learner, and the PR checklist.
 
 ---
 
