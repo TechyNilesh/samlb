@@ -12,6 +12,7 @@ from ._cpp_wrappers import (
     EFDTClassifier,
     SGTClassifier,
     ARFClassifier,
+    SRPClassifier,
     # regression
     LinearRegression,
     BayesianLinearRegression,
@@ -32,7 +33,7 @@ __all__ = [
     "NaiveBayes", "Perceptron", "LogisticRegression",
     "PassiveAggressiveClassifier", "SoftmaxRegression",
     "KNNClassifier", "HoeffdingTreeClassifier", "EFDTClassifier", "SGTClassifier",
-    "ARFClassifier",
+    "ARFClassifier", "SRPClassifier",
     "LinearRegression", "BayesianLinearRegression",
     "PassiveAggressiveRegressor", "KNNRegressor", "HoeffdingTreeRegressor",
     "ARFRegressor",

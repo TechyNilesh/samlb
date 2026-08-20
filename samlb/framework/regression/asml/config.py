@@ -4,7 +4,7 @@ ASML Regression — search space configuration.
 Base models use SAMLB C++ backends.
 """
 from samlb.framework.base import (
-    MaxAbsScaler, MinMaxScaler, SelectKBest, StandardScaler, VarianceThreshold,
+    MaxAbsScaler, MinMaxScaler, SelectKBest,
 )
 
 from samlb.framework.base._cpp_wrappers import (

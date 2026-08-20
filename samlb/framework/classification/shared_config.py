@@ -16,7 +16,7 @@ for all four frameworks at once.
 from __future__ import annotations
 
 import dataclasses
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from samlb.framework.base import MaxAbsScaler, MinMaxScaler, StandardScaler
 

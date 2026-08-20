@@ -63,15 +63,19 @@ Not AutoML — single methods, included so AutoML results have a floor to be rea
 against.
 
 ```python
-from samlb.framework.base import ARFClassifier, ARFRegressor
+from samlb.framework.base import ARFClassifier, ARFRegressor, SRPClassifier
 
 ARFClassifier(n_models=10, seed=42)   # Gomes et al. 2017
 ARFRegressor(n_models=10, seed=42)
+SRPClassifier(n_models=10, seed=42)   # Gomes et al. 2019
 ```
 
-SRP (Gomes et al. 2019) is implemented in the C++ core but has no Python
-wrapper yet; it is reachable as `samlb._samlb_core.SRPClassifier`, without the
-`clone()` / pipeline surface the wrapped learners have.
+ARF and SRP differ in where the feature randomisation happens: ARF resamples a
+subspace at every split attempt inside the tree, SRP gives each ensemble member
+one fixed feature subset for life and feeds it a projected instance.
+`training_method` picks which half of the recipe SRP uses — `"patches"`
+(subspace and resampling, the paper's default), `"subspaces"`, or
+`"resampling"`. See [[Base Algorithms]].
 
 ## Constructor parameters
 

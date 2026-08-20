@@ -234,6 +234,8 @@ Every per-instance component is implemented in C++ and exposed through thin Pyth
 
 **Classification:** Naive Bayes, Perceptron, Logistic Regression, Passive Aggressive, Softmax Regression, KNN, Hoeffding Tree, EFDT, SGT
 
+**Ensembles:** ARF (Gomes et al. 2017, classification & regression), SRP (Gomes et al. 2019)
+
 **Regression:** Linear Regression, Bayesian Linear Regression, Passive Aggressive, Hoeffding Tree, KNN
 
 **Preprocessing:** MinMaxScaler, StandardScaler, MaxAbsScaler, VarianceThreshold, SelectKBest (Pearson)

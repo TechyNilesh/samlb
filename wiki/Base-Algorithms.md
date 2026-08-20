@@ -9,7 +9,7 @@ from samlb.framework.base import (
     # classification
     NaiveBayes, Perceptron, LogisticRegression, PassiveAggressiveClassifier,
     SoftmaxRegression, KNNClassifier, HoeffdingTreeClassifier, EFDTClassifier,
-    SGTClassifier, ARFClassifier,
+    SGTClassifier, ARFClassifier, SRPClassifier,
     # regression
     LinearRegression, BayesianLinearRegression, PassiveAggressiveRegressor,
     KNNRegressor, HoeffdingTreeRegressor, ARFRegressor,
@@ -46,7 +46,12 @@ HoeffdingTreeClassifier(grace_period=200, split_confidence=1e-7, tie_threshold=0
                         nb_threshold=0, max_depth=20, split_criterion="info_gain", ...)
 KNNClassifier(n_neighbors=5, window_size=1000, p=2)
 ARFClassifier(n_models=10, seed=0, lambda_value=6.0, drift_delta=0.001,
-              warning_delta=0.01, grace_period=50, max_depth=...)
+              warning_delta=0.01, grace_period=50, max_depth=20,
+              split_confidence=0.01, subspace_size=-1)
+SRPClassifier(n_models=10, seed=0, lambda_value=6.0, drift_delta=0.001,
+              warning_delta=0.01, grace_period=50, max_depth=20,
+              split_confidence=0.01, subspace_fraction=0.6,
+              training_method="patches")   # or "subspaces" / "resampling"
 
 HoeffdingTreeRegressor(grace_period=200, split_confidence=1e-7,
                        tie_threshold=0.05, max_depth=20, learning_rate=0.01)

@@ -203,6 +203,65 @@ class ARFClassifier(_Classifier):
         )
 
 
+class SRPClassifier(_Classifier):
+    """Streaming Random Patches (C++ backend).
+
+    Gomes et al., ECML PKDD 2019. The difference from :class:`ARFClassifier` is
+    where the feature randomisation happens: ARF resamples a subspace at every
+    split attempt inside the tree, while SRP draws one random feature subset per
+    ensemble member and keeps it for that member's whole life, so the base
+    learner is an unmodified tree fed a projected instance. Combined with
+    Poisson resampling that gives a random *patch* — a subset of features by a
+    subset of instances.
+
+    Parameters
+    ----------
+    training_method : str
+        ``"patches"`` (default) — subspace and resampling, the paper's RP.
+        ``"subspaces"`` — subspace only; every member sees every instance once.
+        ``"resampling"`` — resampling only, over all features.
+    subspace_fraction : float
+        Share of the features each member is given.
+    """
+
+    def __init__(
+        self,
+        n_models: int = 10,
+        seed: int = 0,
+        lambda_value: float = 6.0,
+        drift_delta: float = 0.001,
+        warning_delta: float = 0.01,
+        grace_period: int = 50,
+        max_depth: int = 20,
+        split_confidence: float = 0.01,
+        subspace_fraction: float = 0.6,
+        training_method: str = "patches",
+    ):
+        if training_method not in ("patches", "subspaces", "resampling"):
+            raise ValueError(
+                "training_method must be 'patches', 'subspaces' or 'resampling', "
+                f"got {training_method!r}."
+            )
+        self.n_models = n_models
+        self.seed = seed
+        self.lambda_value = lambda_value
+        self.drift_delta = drift_delta
+        self.warning_delta = warning_delta
+        self.grace_period = grace_period
+        self.max_depth = max_depth
+        self.split_confidence = split_confidence
+        self.subspace_fraction = subspace_fraction
+        self.training_method = training_method
+        self._cpp = _core.SRPClassifier(
+            n_models=n_models, seed=seed, lambda_value=lambda_value,
+            drift_delta=drift_delta, warning_delta=warning_delta,
+            grace_period=grace_period, max_depth=max_depth,
+            split_confidence=split_confidence,
+            subspace_fraction=subspace_fraction,
+            training_method=training_method,
+        )
+
+
 # ── Regression ────────────────────────────────────────────────────────────────
 
 class _Regressor(Estimator):

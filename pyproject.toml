@@ -31,7 +31,9 @@ river = [
     "river>=0.21",
 ]
 capymoa = [
-    "capymoa>=0.14",
+    # CapyMOA pulls numpy>=2.2, which is Python >= 3.10 only. On 3.9 the extra
+    # resolves to nothing and CapyMOAClassifier.is_available() returns False.
+    "capymoa>=0.14; python_version >= '3.10'",
 ]
 dev = [
     "pytest>=7.0",
