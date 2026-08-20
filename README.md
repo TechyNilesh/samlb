@@ -38,10 +38,12 @@ cd samlb
 pip install -e ".[dev]"
 ```
 
-### Optional: Vowpal Wabbit support (for ChaCha regressor)
+### Optional backends
 
 ```bash
-pip install "samlb[vw]"
+pip install "samlb[vw]"       # Vowpal Wabbit, for the ChaCha regressor
+pip install "samlb[river]"    # River algorithms, via the River adapters
+pip install "samlb[capymoa]"  # CapyMOA/MOA algorithms (needs a JVM)
 ```
 
 > **Requirements:** Python >= 3.9, a C++ compiler (for the native extension), CMake
@@ -140,6 +142,91 @@ python examples/run_regression.py --n_runs 5 --datasets bike california_housing
 | Baseline | Strategy | Key Features |
 |----------|----------|--------------|
 | **RandomSearch** | Random per-window selection | Keeps the full shared learner pool warm, randomly picks one pipeline per exploration window |
+
+## External Algorithms (River & CapyMOA)
+
+Benchmarks often need to place SAMLB's frameworks next to algorithms from
+[River](https://riverml.xyz) or [CapyMOA](https://capymoa.org). Two adapters
+make any learner from either library usable as a SAMLB model — same
+`predict_one` / `learn_one` / `reset` contract, so it drops straight into
+`BenchmarkSuite` and is scored by the same prequential evaluator.
+
+Both libraries are optional. Nothing is imported until an adapter is
+constructed, and `is_available()` lets a suite skip a backend that is not
+installed rather than fail.
+
+```python
+from river import forest, preprocessing
+from samlb.benchmark import BenchmarkSuite
+from samlb.framework.adapters import CapyMOAClassifier, RiverClassifier
+from samlb.framework.base import ARFClassifier
+
+models = {"SAMLB-ARF": ARFClassifier(n_models=10, seed=42)}
+
+if RiverClassifier.is_available():
+    models["River-ARF"] = RiverClassifier(
+        preprocessing.StandardScaler() | forest.ARFClassifier(n_models=10, seed=42),
+        name="River-ARF",
+    )
+
+if CapyMOAClassifier.is_available():
+    models["MOA-ARF"] = CapyMOAClassifier(
+        "AdaptiveRandomForestClassifier", ensemble_size=10, seed=42, name="MOA-ARF",
+    )
+
+BenchmarkSuite(models=models, datasets=["electricity"],
+               task="classification", n_runs=10).run()
+```
+
+`examples/run_external_baselines.py` runs exactly this comparison from the
+command line, for either task:
+
+```bash
+python3 examples/run_external_baselines.py --task classification --n_runs 10
+python3 examples/run_external_baselines.py --task regression --datasets abalone
+```
+
+### River adapters
+
+`RiverClassifier` / `RiverRegressor` take a River estimator or a pipeline ending
+in one. The object you pass is a **prototype**: it is cloned before every run and
+never trained in place, so one adapter can be reused across seeds and datasets.
+Pass a zero-argument callable instead when an estimator cannot be cloned.
+
+```python
+from samlb.framework.adapters import RiverRegressor
+
+RiverRegressor(preprocessing.StandardScaler() | linear_model.LinearRegression())
+RiverRegressor(lambda: forest.ARFRegressor(seed=1), name="River-ARF")
+```
+
+River classifiers return `None` until they have seen a label; the evaluator
+counts those instances but does not score them, exactly as it does for OAML's
+warm-up.
+
+### CapyMOA adapters
+
+`CapyMOAClassifier` / `CapyMOARegressor` take a CapyMOA **class**, or its name in
+`capymoa.classifier` / `capymoa.regressor`, plus any learner keyword arguments.
+A class rather than an instance, because a CapyMOA learner is bound to a MOA
+`Schema` at construction and the schema is not known until the stream starts.
+The adapter derives it from the first instance, builds the learner then, and
+converts each `{feature: value}` dict to the dense array MOA expects.
+
+```python
+from samlb.framework.adapters import CapyMOAClassifier, CapyMOARegressor
+
+CapyMOAClassifier("HoeffdingTree", grace_period=50, seed=42)
+CapyMOAClassifier("AdaptiveRandomForestClassifier", ensemble_size=10)
+CapyMOARegressor("AdaptiveRandomForestRegressor", ensemble_size=10)
+```
+
+MOA works in class *indices*, so the adapter keeps the label mapping and hands
+back the original SAMLB labels. Labels are discovered as they arrive, against
+`max_classes` reserved nominal slots (100 by default; only MOA's per-class
+memory scales with it). Pass `classes=[...]` when the label set is known up
+front — the schema is then exact and an unexpected label raises instead of
+being silently absorbed.
 
 ## C++ Base Algorithms
 
@@ -259,6 +346,7 @@ The released repository includes the raw JSON results used for the paper under `
 │   ├── datasets/              # 30 datasets (15 clf + 15 reg NPZ files)
 │   └── framework/             # AutoML framework implementations
 │       ├── base/              # BaseStreamFramework + C++ wrappers
+│       ├── adapters/          # River & CapyMOA adapters (optional backends)
 │       ├── random_search.py   # RandomSearch baseline (task-agnostic)
 │       ├── classification/    # ASML, AutoClass, EvoAutoML, OAML
 │       └── regression/        # ASML, ChaCha, EvoAutoML
@@ -268,7 +356,8 @@ The released repository includes the raw JSON results used for the paper under `
 ├── tests/                     # Test suite
 └── examples/                  # Benchmark runner scripts
     ├── run_benchmark.py       # Classification benchmark CLI
-    └── run_regression.py      # Regression benchmark CLI
+    ├── run_regression.py      # Regression benchmark CLI
+    └── run_external_baselines.py  # River / CapyMOA comparison CLI
 ```
 
 ---

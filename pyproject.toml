@@ -27,6 +27,12 @@ dependencies = [
 vw = [
     "flaml[vw]>=2.3",
 ]
+river = [
+    "river>=0.21",
+]
+capymoa = [
+    "capymoa>=0.14",
+]
 dev = [
     "pytest>=7.0",
     "pytest-benchmark",
