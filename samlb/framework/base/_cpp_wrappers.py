@@ -262,6 +262,82 @@ class SRPClassifier(_Classifier):
         )
 
 
+class LeveragingBaggingClassifier(_Classifier):
+    """Leveraging Bagging (C++ backend).
+
+    Bifet, Holmes & Pfahringer, ICDM 2010. Diversity comes from a higher
+    Poisson resampling weight than plain online bagging (default lambda=6,
+    matching MOA's LeveragingBag) rather than feature subspacing. Each member
+    carries its own ADWIN and is reset outright the moment its own detector
+    fires drift — no background-tree promotion, unlike ARF/SRP. Voting is
+    unweighted majority across members.
+    """
+
+    def __init__(
+        self,
+        n_models: int = 10,
+        seed: int = 0,
+        lambda_value: float = 6.0,
+        drift_delta: float = 0.002,
+        grace_period: int = 50,
+        max_depth: int = 20,
+        split_confidence: float = 0.01,
+    ):
+        self.n_models = n_models
+        self.seed = seed
+        self.lambda_value = lambda_value
+        self.drift_delta = drift_delta
+        self.grace_period = grace_period
+        self.max_depth = max_depth
+        self.split_confidence = split_confidence
+        self._cpp = _core.LeveragingBaggingClassifier(
+            n_models=n_models, seed=seed, lambda_value=lambda_value,
+            drift_delta=drift_delta, grace_period=grace_period,
+            max_depth=max_depth, split_confidence=split_confidence,
+        )
+
+
+class HoeffdingAdaptiveTreeClassifier(_Classifier):
+    """Hoeffding Adaptive Tree (C++ backend).
+
+    Bifet & Gavaldà, SDM 2009. The reference implementation monitors every
+    *node* with its own ADWIN and grows a per-node alternate subtree once that
+    node's local error drifts. This backend applies the same warning/drift +
+    background-tree mechanism ARFClassifier uses per ensemble member, but to
+    a single whole tree rather than per node: one ADWIN pair tracks overall
+    accuracy, a background tree trains in parallel once a warning fires, and
+    it replaces the foreground tree wholesale on drift. Expect coarser,
+    later reactions to *local* drift than MOA's/river's node-level
+    HoeffdingAdaptiveTree, which resets only the affected subtree.
+    """
+
+    def __init__(
+        self,
+        grace_period: int = 200,
+        split_confidence: float = 1e-7,
+        tie_threshold: float = 0.05,
+        nb_threshold: int = 0,
+        max_depth: int = 20,
+        drift_delta: float = 0.002,
+        warning_delta: float = 0.02,
+        split_criterion: str = "info_gain",
+    ):
+        self.grace_period = grace_period
+        self.split_confidence = split_confidence
+        self.tie_threshold = tie_threshold
+        self.nb_threshold = nb_threshold
+        self.max_depth = max_depth
+        self.drift_delta = drift_delta
+        self.warning_delta = warning_delta
+        self.split_criterion = split_criterion
+        self._cpp = _core.HoeffdingAdaptiveTreeClassifier(
+            grace_period=grace_period, split_confidence=split_confidence,
+            tie_threshold=tie_threshold, nb_threshold=nb_threshold,
+            max_depth=max_depth, drift_delta=drift_delta,
+            warning_delta=warning_delta, split_criterion=split_criterion,
+        )
+
+
 # ── Regression ────────────────────────────────────────────────────────────────
 
 class _Regressor(Estimator):
@@ -375,6 +451,62 @@ class ARFRegressor(_Regressor):
             grace_period=grace_period,
             max_depth=max_depth,
             learning_rate=learning_rate,
+        )
+
+
+class SRPRegressor(_Regressor):
+    """Streaming Random Patches Regressor (C++ backend).
+
+    Gomes et al., ECML PKDD 2019 — the regression counterpart of
+    :class:`SRPClassifier`. Each ensemble member gets one fixed random feature
+    subspace for its whole life (rather than ARF's per-split resampling),
+    combined with Poisson resampling for a random *patch* of the input.
+
+    Parameters
+    ----------
+    training_method : str
+        ``"patches"`` (default) — subspace and resampling, the paper's RP.
+        ``"subspaces"`` — subspace only; every member sees every instance once.
+        ``"resampling"`` — resampling only, over all features.
+    subspace_fraction : float
+        Share of the features each member is given.
+    """
+
+    def __init__(
+        self,
+        n_models: int = 10,
+        seed: int = 0,
+        lambda_value: float = 6.0,
+        drift_delta: float = 0.001,
+        warning_delta: float = 0.01,
+        grace_period: int = 200,
+        max_depth: int = 20,
+        learning_rate: float = 0.01,
+        subspace_fraction: float = 0.6,
+        training_method: str = "patches",
+    ):
+        if training_method not in ("patches", "subspaces", "resampling"):
+            raise ValueError(
+                "training_method must be 'patches', 'subspaces' or 'resampling', "
+                f"got {training_method!r}."
+            )
+        self.n_models = n_models
+        self.seed = seed
+        self.lambda_value = lambda_value
+        self.drift_delta = drift_delta
+        self.warning_delta = warning_delta
+        self.grace_period = grace_period
+        self.max_depth = max_depth
+        self.learning_rate = learning_rate
+        self.subspace_fraction = subspace_fraction
+        self.training_method = training_method
+        self._cpp = _core.SRPRegressor(
+            n_models=n_models, seed=seed, lambda_value=lambda_value,
+            drift_delta=drift_delta, warning_delta=warning_delta,
+            grace_period=grace_period, max_depth=max_depth,
+            learning_rate=learning_rate,
+            subspace_fraction=subspace_fraction,
+            training_method=training_method,
         )
 
 

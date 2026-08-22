@@ -1,80 +1,20 @@
 """
 ASML Regression — search space configuration.
-
-Base models use SAMLB C++ backends.
+Uses the shared C++ algorithm pool defined in shared_config.
 """
-from samlb.framework.base import (
-    MaxAbsScaler, MinMaxScaler, SelectKBest,
+from samlb.framework.base import SelectKBest
+
+from samlb.framework.regression.shared_config import (
+    SHARED_HYPERPARAMETERS,
+    SHARED_MODEL_POOL,
+    SHARED_PREPROCESSORS,
 )
 
-from samlb.framework.base._cpp_wrappers import (
-    LinearRegression,
-    BayesianLinearRegression,
-    PassiveAggressiveRegressor,
-    KNNRegressor,
-    HoeffdingTreeRegressor,
-)
-from .helper import range_gen
-
-# ── model pool ────────────────────────────────────────────────────────────────
-
-model_options = [
-    LinearRegression(),
-    BayesianLinearRegression(),
-    PassiveAggressiveRegressor(),
-    KNNRegressor(),
-    HoeffdingTreeRegressor(),
-]
-
-# ── preprocessing ─────────────────────────────────────────────────────────────
-
-preprocessor_options = [
-    MinMaxScaler(),
-    MaxAbsScaler(),
-]
-
-# ── feature selection ─────────────────────────────────────────────────────────
-
-feature_selection_options = [
-    SelectKBest(),
-]
-
-# ── hyperparameter search spaces ──────────────────────────────────────────────
-
-hyperparameters_options = {
-    # C++ wrappers
-    "LinearRegression": {
-        "learning_rate": range_gen(0.001, 0.1, step=0.005, float_n=True),
-        "l2":            range_gen(0.0, 0.01, step=0.001, float_n=True),
-    },
-    "BayesianLinearRegression": {
-        "alpha": range_gen(0.1, 10.0, step=0.5, float_n=True),
-        "beta":  range_gen(0.1, 10.0, step=0.5, float_n=True),
-    },
-    "PassiveAggressiveRegressor": {
-        "C":       range_gen(0.1, 10.0, step=0.5, float_n=True),
-        "epsilon": range_gen(0.0, 0.5, step=0.05, float_n=True),
-    },
-    "KNNRegressor": {
-        "n_neighbors": range_gen(2, 20, step=2),
-        "window_size": range_gen(200, 2000, step=200),
-        "p":           [1, 2],
-    },
-    "HoeffdingTreeRegressor": {
-        "grace_period":     range_gen(50, 500, step=50),
-        "split_confidence": [1e-9, 1e-7, 1e-4, 1e-2],
-        "tie_threshold":    range_gen(0.02, 0.08, step=0.01, float_n=True),
-        "max_depth":        range_gen(10, 100, step=10),
-        "learning_rate":    range_gen(0.001, 0.1, step=0.005, float_n=True),
-    },
-    # River preprocessors
-    "MinMaxScaler":  {},
-    "MaxAbsScaler":  {},
-    # River feature selectors
-    "SelectKBest": {
-        "k": range_gen(2, 25, step=1),
-    },
-}
+# Expose under the names ASML code references
+model_options              = SHARED_MODEL_POOL
+preprocessor_options        = SHARED_PREPROCESSORS
+feature_selection_options   = [SelectKBest()]
+hyperparameters_options     = SHARED_HYPERPARAMETERS
 
 # ── default config dict ───────────────────────────────────────────────────────
 

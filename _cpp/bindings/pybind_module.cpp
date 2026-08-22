@@ -19,6 +19,7 @@
 #include "../classification/hoeffding_tree.h"
 #include "../classification/efdt.h"
 #include "../classification/sgt.h"
+#include "../classification/hat_cls.h"
 
 // Regression
 #include "../regression/linear_regression.h"
@@ -31,6 +32,8 @@
 // Ensembles (SOTA streaming baselines)
 #include "../ensemble/arf_cls.h"
 #include "../ensemble/srp_cls.h"
+#include "../ensemble/srp_reg.h"
+#include "../ensemble/leveraging_bagging_cls.h"
 
 // Preprocessing / feature selection
 #include "../preprocessing/scalers.h"
@@ -201,6 +204,42 @@ PYBIND11_MODULE(_samlb_core, m) {
         .def_readwrite("n_models", &SRPClassifier::n_models)
         .def_readwrite("seed",     &SRPClassifier::seed);
 
+    py::class_<LeveragingBaggingClassifier, IClassifier,
+               std::shared_ptr<LeveragingBaggingClassifier>>(m, "LeveragingBaggingClassifier")
+        .def(py::init<int, int, double, double, int, int, double>(),
+             py::arg("n_models")         = 10,
+             py::arg("seed")             = 0,
+             py::arg("lambda_value")     = 6.0,
+             py::arg("drift_delta")      = 0.002,
+             py::arg("grace_period")     = 50,
+             py::arg("max_depth")        = 20,
+             py::arg("split_confidence") = 0.01)
+        .def("learn_one",         &LeveragingBaggingClassifier::learn_one)
+        .def("predict_one",       &LeveragingBaggingClassifier::predict_one)
+        .def("predict_proba_one", &LeveragingBaggingClassifier::predict_proba_one)
+        .def("reset",             &LeveragingBaggingClassifier::reset)
+        .def_readwrite("n_models", &LeveragingBaggingClassifier::n_models)
+        .def_readwrite("seed",     &LeveragingBaggingClassifier::seed);
+
+    py::class_<HoeffdingAdaptiveTreeClassifier, IClassifier,
+               std::shared_ptr<HoeffdingAdaptiveTreeClassifier>>(
+            m, "HoeffdingAdaptiveTreeClassifier")
+        .def(py::init<int, double, double, int, int, double, double, std::string>(),
+             py::arg("grace_period")     = 200,
+             py::arg("split_confidence") = 1e-7,
+             py::arg("tie_threshold")    = 0.05,
+             py::arg("nb_threshold")     = 0,
+             py::arg("max_depth")        = 20,
+             py::arg("drift_delta")      = 0.002,
+             py::arg("warning_delta")    = 0.02,
+             py::arg("split_criterion")  = "info_gain")
+        .def("learn_one",         &HoeffdingAdaptiveTreeClassifier::learn_one)
+        .def("predict_one",       &HoeffdingAdaptiveTreeClassifier::predict_one)
+        .def("predict_proba_one", &HoeffdingAdaptiveTreeClassifier::predict_proba_one)
+        .def("reset",             &HoeffdingAdaptiveTreeClassifier::reset)
+        .def_readwrite("grace_period",     &HoeffdingAdaptiveTreeClassifier::grace_period)
+        .def_readwrite("max_depth",        &HoeffdingAdaptiveTreeClassifier::max_depth);
+
     // ------------------------------------------------------------------ //
     //  REGRESSION
     // ------------------------------------------------------------------ //
@@ -282,6 +321,24 @@ PYBIND11_MODULE(_samlb_core, m) {
         .def("reset",       &ARFRegressor::reset)
         .def_readwrite("n_models", &ARFRegressor::n_models)
         .def_readwrite("seed",     &ARFRegressor::seed);
+
+    py::class_<SRPRegressor, IRegressor, std::shared_ptr<SRPRegressor>>(m, "SRPRegressor")
+        .def(py::init<int, int, double, double, double, int, int, double, double, std::string>(),
+             py::arg("n_models")          = 10,
+             py::arg("seed")              = 0,
+             py::arg("lambda_value")      = 6.0,
+             py::arg("drift_delta")       = 0.001,
+             py::arg("warning_delta")     = 0.01,
+             py::arg("grace_period")      = 200,
+             py::arg("max_depth")         = 20,
+             py::arg("learning_rate")     = 0.01,
+             py::arg("subspace_fraction") = 0.6,
+             py::arg("training_method")   = "patches")
+        .def("learn_one",   &SRPRegressor::learn_one)
+        .def("predict_one", &SRPRegressor::predict_one)
+        .def("reset",       &SRPRegressor::reset)
+        .def_readwrite("n_models", &SRPRegressor::n_models)
+        .def_readwrite("seed",     &SRPRegressor::seed);
 
     // ------------------------------------------------------------------ //
     //  PREPROCESSING

@@ -21,14 +21,18 @@ from typing import Dict, List
 from samlb.framework.base import MaxAbsScaler, MinMaxScaler, StandardScaler
 
 from samlb.framework.base._cpp_wrappers import (
+    ARFClassifier,
+    HoeffdingAdaptiveTreeClassifier,
     HoeffdingTreeClassifier,
     KNNClassifier,
+    LeveragingBaggingClassifier,
     LogisticRegression,
     NaiveBayes,
     PassiveAggressiveClassifier,
     Perceptron,
     SGTClassifier,
     SoftmaxRegression,
+    SRPClassifier,
 )
 from samlb.framework.classification.asml.helper import range_gen
 
@@ -53,6 +57,21 @@ SHARED_MODEL_POOL = [
     HoeffdingTreeClassifier(),
     SGTClassifier(),
     KNNClassifier(),
+]
+
+# ── Ensemble baseline pool ──────────────────────────────────────────────────
+# Drift-adaptive ensembles (ARF, SRP, Leveraging Bagging, Hoeffding Adaptive
+# Tree) instead of the plain single-model pool above. Pass this to
+# ``get_classification_config(pool="ensemble")`` when a search framework
+# should pick among strong streaming baselines rather than tune simple models
+# from scratch — e.g. to see whether search still adds value once every
+# candidate is already drift-adaptive on its own.
+
+ENSEMBLE_MODEL_POOL = [
+    ARFClassifier(),
+    SRPClassifier(),
+    LeveragingBaggingClassifier(),
+    HoeffdingAdaptiveTreeClassifier(),
 ]
 
 # ── Hyperparameter search spaces ──────────────────────────────────────────────
@@ -91,6 +110,30 @@ SHARED_HYPERPARAMETERS = {
         "n_neighbors": range_gen(3, 15, step=2),
         "window_size": range_gen(200, 2000, step=200),
         "p":           [1, 2],
+    },
+    "ARFClassifier": {
+        "n_models":         range_gen(5, 30, step=5),
+        "lambda_value":     range_gen(1.0, 10.0, step=1.0, float_n=True),
+        "grace_period":     range_gen(50, 500, step=50),
+        "split_confidence": [1e-9, 1e-7, 1e-4, 1e-2],
+        "max_depth":        range_gen(10, 100, step=10),
+    },
+    "SRPClassifier": {
+        "n_models":          range_gen(5, 30, step=5),
+        "lambda_value":      range_gen(1.0, 10.0, step=1.0, float_n=True),
+        "subspace_fraction": range_gen(0.2, 0.9, step=0.1, float_n=True),
+        "training_method":   ["patches", "subspaces", "resampling"],
+    },
+    "LeveragingBaggingClassifier": {
+        "n_models":     range_gen(5, 30, step=5),
+        "lambda_value": range_gen(1.0, 10.0, step=1.0, float_n=True),
+        "drift_delta":  [1e-4, 1e-3, 1e-2, 5e-2],
+    },
+    "HoeffdingAdaptiveTreeClassifier": {
+        "grace_period":  range_gen(50, 500, step=50),
+        "max_depth":     range_gen(10, 100, step=10),
+        "drift_delta":   [1e-4, 1e-3, 1e-2, 5e-2],
+        "warning_delta": [1e-3, 1e-2, 5e-2, 1e-1],
     },
 }
 
@@ -132,6 +175,27 @@ SHARED_CLASSIFIER_INSTANCES = [
     KNNClassifier(n_neighbors=5,  window_size=1000),
     KNNClassifier(n_neighbors=10, window_size=2000),
     KNNClassifier(n_neighbors=5,  window_size=500,  p=1),
+]
+
+# Ensemble-baseline counterpart of SHARED_CLASSIFIER_INSTANCES, for EvoAutoML
+# (param_grid) / OAML (classifiers=) when the pool should be drift-adaptive
+# ensembles rather than plain single models.
+
+ENSEMBLE_CLASSIFIER_INSTANCES = [
+    # ARF
+    ARFClassifier(n_models=10),
+    ARFClassifier(n_models=20, lambda_value=8.0),
+    ARFClassifier(n_models=10, grace_period=200),
+    # SRP
+    SRPClassifier(n_models=10),
+    SRPClassifier(n_models=10, training_method="subspaces"),
+    SRPClassifier(n_models=10, subspace_fraction=0.4),
+    # Leveraging Bagging
+    LeveragingBaggingClassifier(n_models=10),
+    LeveragingBaggingClassifier(n_models=20, lambda_value=8.0),
+    # Hoeffding Adaptive Tree
+    HoeffdingAdaptiveTreeClassifier(),
+    HoeffdingAdaptiveTreeClassifier(grace_period=100, drift_delta=0.01),
 ]
 
 
@@ -251,3 +315,47 @@ DEFAULT_CLASSIFICATION_CONFIG = ClassificationConfig(
     hyperparameters=SHARED_HYPERPARAMETERS,
     classifier_instances=SHARED_CLASSIFIER_INSTANCES,
 )
+
+# ── Ensemble-baseline config (ARF / SRP / Leveraging Bagging / HAT pool) ──────
+# Same shape, different candidate set: every model in this pool is already a
+# drift-adaptive ensemble on its own, so this is what you pass a framework to
+# search *over* baselines instead of tuning plain single models from scratch.
+
+ENSEMBLE_CLASSIFICATION_CONFIG = ClassificationConfig(
+    scalers=SHARED_PREPROCESSORS,
+    model_pool=ENSEMBLE_MODEL_POOL,
+    hyperparameters=SHARED_HYPERPARAMETERS,
+    classifier_instances=ENSEMBLE_CLASSIFIER_INSTANCES,
+)
+
+
+def get_classification_config(pool: str = "normal") -> ClassificationConfig:
+    """Return the :class:`ClassificationConfig` for the requested model pool.
+
+    Parameters
+    ----------
+    pool : str
+        ``"normal"`` / ``"plain"`` (default) — single models (Naive Bayes,
+        Perceptron, Hoeffding Tree, ...), the pool a search framework tunes
+        and combines from scratch.
+        ``"ensemble"`` / ``"baseline"`` — drift-adaptive ensembles (ARF, SRP,
+        Leveraging Bagging, Hoeffding Adaptive Tree) as the candidates
+        instead, for measuring whether search still adds value once every
+        candidate is already a strong baseline on its own.
+
+    Examples
+    --------
+        from samlb.framework.classification.shared_config import get_classification_config
+        from samlb.framework.classification.asml import AutoStreamClassifier
+
+        cfg = get_classification_config(pool="ensemble")
+        model = AutoStreamClassifier(config_dict=cfg.asml_config_dict(), seed=42)
+    """
+    normalized = pool.strip().lower()
+    if normalized in ("normal", "plain", "default"):
+        return DEFAULT_CLASSIFICATION_CONFIG
+    if normalized in ("ensemble", "baseline", "ensemble_baseline"):
+        return ENSEMBLE_CLASSIFICATION_CONFIG
+    raise ValueError(
+        f"pool must be 'normal' or 'ensemble', got {pool!r}."
+    )

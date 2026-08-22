@@ -13,6 +13,8 @@ from ._cpp_wrappers import (
     SGTClassifier,
     ARFClassifier,
     SRPClassifier,
+    LeveragingBaggingClassifier,
+    HoeffdingAdaptiveTreeClassifier,
     # regression
     LinearRegression,
     BayesianLinearRegression,
@@ -20,6 +22,7 @@ from ._cpp_wrappers import (
     KNNRegressor,
     HoeffdingTreeRegressor,
     ARFRegressor,
+    SRPRegressor,
     # preprocessing / feature selection
     StandardScaler,
     MinMaxScaler,
@@ -34,9 +37,10 @@ __all__ = [
     "PassiveAggressiveClassifier", "SoftmaxRegression",
     "KNNClassifier", "HoeffdingTreeClassifier", "EFDTClassifier", "SGTClassifier",
     "ARFClassifier", "SRPClassifier",
+    "LeveragingBaggingClassifier", "HoeffdingAdaptiveTreeClassifier",
     "LinearRegression", "BayesianLinearRegression",
     "PassiveAggressiveRegressor", "KNNRegressor", "HoeffdingTreeRegressor",
-    "ARFRegressor",
+    "ARFRegressor", "SRPRegressor",
     "StandardScaler", "MinMaxScaler", "MaxAbsScaler",
     "VarianceThreshold", "SelectKBest",
 ]
