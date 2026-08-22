@@ -37,6 +37,7 @@ set(CPP_SOURCES
     _cpp/classification/hoeffding_tree.cpp
     _cpp/classification/efdt.cpp
     _cpp/classification/sgt.cpp
+    _cpp/classification/hat_cls.cpp
     _cpp/regression/linear_regression.cpp
     _cpp/regression/bayesian_linear_reg.cpp
     _cpp/regression/passive_aggressive_reg.cpp
@@ -45,6 +46,8 @@ set(CPP_SOURCES
     _cpp/regression/arf_reg.cpp
     _cpp/ensemble/arf_cls.cpp
     _cpp/ensemble/srp_cls.cpp
+    _cpp/ensemble/srp_reg.cpp
+    _cpp/ensemble/leveraging_bagging_cls.cpp
     _cpp/preprocessing/scalers.cpp
     _cpp/preprocessing/feature_selection.cpp
     _cpp/metrics/metrics.cpp

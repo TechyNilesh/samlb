@@ -143,6 +143,48 @@ python examples/run_regression.py --n_runs 5 --datasets bike california_housing
 |----------|----------|--------------|
 | **RandomSearch** | Random per-window selection | Keeps the full shared learner pool warm, randomly picks one pipeline per exploration window |
 
+## Model Pool Selection: Normal vs. Ensemble Baselines
+
+Every search framework's candidate pool is swappable between two presets —
+`"normal"` (plain single models: Naive Bayes, Perceptron, Hoeffding Tree, ...)
+and `"ensemble"` (drift-adaptive ensembles: ARF, SRP, Leveraging Bagging,
+Hoeffding Adaptive Tree) — via `get_classification_config` /
+`get_regression_config`. This is useful for asking a different question than
+the usual "does search beat RandomSearch": does search still help once every
+candidate is *already* a strong, drift-adaptive baseline on its own?
+
+```python
+from samlb.framework import get_classification_config
+from samlb.framework.classification.asml      import AutoStreamClassifier
+from samlb.framework.classification.autoclass import AutoClass
+from samlb.framework.classification.eaml      import EvolutionaryBaggingClassifier
+from samlb.framework.classification.oaml      import OAMLClassifier
+
+cfg = get_classification_config(pool="ensemble")   # or pool="normal" (default)
+
+model = AutoStreamClassifier(config_dict=cfg.asml_config_dict(), seed=42)
+model = AutoClass(config_dict=cfg.autoclass_config_dict(), seed=42)
+model = EvolutionaryBaggingClassifier(param_grid=cfg.eaml_param_grid(), seed=42)
+model = OAMLClassifier(scalers=cfg.scalers, classifiers=cfg.classifier_instances, seed=42)
+```
+
+Regression works the same way, over `ARFRegressor`/`SRPRegressor` instead:
+
+```python
+from samlb.framework import get_regression_config
+from samlb.framework.regression.asml import AutoStreamRegressor
+from samlb.framework.regression.eaml import EvolutionaryBaggingRegressor
+
+cfg = get_regression_config(pool="ensemble")
+model = AutoStreamRegressor(config_dict=cfg.asml_config_dict(), seed=42)
+model = EvolutionaryBaggingRegressor(param_grid=cfg.eaml_param_grid(), seed=42)
+```
+
+Both presets live in `samlb.framework.classification.shared_config`
+(`ClassificationConfig`) and `samlb.framework.regression.shared_config`
+(`RegressionConfig`) — pass a custom instance of either dataclass to mix and
+match your own model pool instead of the two built-in presets.
+
 ## External Algorithms (River & CapyMOA)
 
 Benchmarks often need to place SAMLB's frameworks next to algorithms from
@@ -234,7 +276,7 @@ Every per-instance component is implemented in C++ and exposed through thin Pyth
 
 **Classification:** Naive Bayes, Perceptron, Logistic Regression, Passive Aggressive, Softmax Regression, KNN, Hoeffding Tree, EFDT, SGT
 
-**Ensembles:** ARF (Gomes et al. 2017, classification & regression), SRP (Gomes et al. 2019)
+**Ensembles:** ARF (Gomes et al. 2017, classification & regression), SRP (Gomes et al. 2019, classification & regression), Leveraging Bagging (Bifet et al. 2010), Hoeffding Adaptive Tree (Bifet & Gavaldà 2009, whole-tree simplification — see `HoeffdingAdaptiveTreeClassifier` docstring)
 
 **Regression:** Linear Regression, Bayesian Linear Regression, Passive Aggressive, Hoeffding Tree, KNN
 
