@@ -7,6 +7,8 @@ WindowedEvaluator    — same loop, verbose=True by default (alias for intent).
 from __future__ import annotations
 
 import math
+import resource
+import sys
 import time
 import traceback
 from typing import Any, Dict, List, Optional
@@ -148,6 +150,7 @@ class PrequentialEvaluator:
         runtime_samples: List[float] = []
 
         t_total = time.perf_counter()
+        rss_start = resource.getrusage(resource.RUSAGE_SELF)
         n_samples = 0
         window_count = 0
         error_str: Optional[str] = None
@@ -227,6 +230,13 @@ class PrequentialEvaluator:
         except Exception:
             error_str = traceback.format_exc()
 
+        rss_end = resource.getrusage(resource.RUSAGE_SELF)
+        cpu_time_s = (rss_end.ru_utime - rss_start.ru_utime) + \
+                     (rss_end.ru_stime - rss_start.ru_stime)
+        # ru_maxrss is KiB on Linux, bytes on macOS.
+        rss = rss_end.ru_maxrss
+        peak_memory_mb = rss / 1024.0 if sys.platform != "darwin" else rss / 1048576.0
+
         return RunResult(
             framework_name=framework_name,
             dataset_name=dataset_name,
@@ -235,6 +245,8 @@ class PrequentialEvaluator:
             metrics=snapshot(cumulative),
             windowed_metrics=windowed,
             total_runtime_s=round(time.perf_counter() - t_total, 4),
+            cpu_time_s=round(cpu_time_s, 4),
+            peak_memory_mb=round(peak_memory_mb, 2),
             runtime_per_instance_ms=runtime_samples,
             error=error_str,
         )

@@ -26,6 +26,10 @@ class RunResult:
                               reg → mae, rmse, r2
     windowed_metrics        : per-window snapshot lists (one entry per window)
     total_runtime_s         : wall-clock seconds for the full run
+    cpu_time_s              : process CPU time (user + system), seconds — unlike
+                              wall-clock this is unaffected by load from other
+                              processes on the same host
+    peak_memory_mb          : peak resident set size (RSS) over the run, in MiB
     runtime_per_instance_ms : sampled per-instance times in ms
     run_id                  : 0-based index of this run (for multi-run benchmarks)
     seed                    : random seed used for this run (None = not set)
@@ -39,6 +43,8 @@ class RunResult:
     windowed_metrics        : Dict[str, List[float]]
     total_runtime_s         : float
     runtime_per_instance_ms : List[float]
+    cpu_time_s              : float
+    peak_memory_mb          : float
     run_id                  : int = 0
     seed                    : Optional[int] = None
     error                   : Optional[str] = None
@@ -58,8 +64,10 @@ class RunResult:
             "dataset":      self.dataset_name,
             "task":         self.task,
             "n_samples":    self.n_samples,
-            "total_time_s": round(self.total_runtime_s, 4),
-            "error":        self.error or "",
+            "total_time_s":    round(self.total_runtime_s, 4),
+            "cpu_time_s":      round(self.cpu_time_s, 4),
+            "peak_memory_mb":  round(self.peak_memory_mb, 2),
+            "error":           self.error or "",
         }
         for k, v in self.metrics.items():
             row[k] = round(v, 6) if isinstance(v, float) else v
@@ -85,6 +93,8 @@ class RunResult:
             "windowed_metrics":        {k: _round_list(v)
                                         for k, v in self.windowed_metrics.items()},
             "total_time_s":            round(self.total_runtime_s, 4),
+            "cpu_time_s":              round(self.cpu_time_s, 4),
+            "peak_memory_mb":          round(self.peak_memory_mb, 2),
             "runtime_per_instance_ms": _round_list(self.runtime_per_instance_ms),
             "error":                   self.error,
         }
