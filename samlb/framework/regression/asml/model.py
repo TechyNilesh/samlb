@@ -23,7 +23,20 @@ from samlb.framework.base._framework import BaseStreamFramework
 from .search import PipelineSearch
 
 
-_NORM_CLIP = 1e6  # in normalised space: if prediction > 1M std devs, it's diverged
+# Divergence guard, in normalised (z-scored target) space. A snapshot whose
+# prediction sits this many standard deviations from the running target mean is
+# treated as diverged: skipped in the ensemble, and replaced by the running mean
+# in single-model mode.
+#
+# This was 1e6 -- a million standard deviations -- which is loose enough to be
+# inert. A snapshot that was merely catastrophic, tens or hundreds of sigma out,
+# passed the check, was denormalised, and dominated the weighted ensemble. Over
+# 5 seeds on the full streams that cost, on fifa, a mean R^2 of 0.61 with a
+# standard deviation of 0.31 and a worst seed of -0.01; at 10 sigma the same
+# dataset gives 0.76 +/- 0.02 with a worst seed of 0.73. Datasets that were
+# already stable do not move at all -- bike is bit-identical -- so the threshold
+# only bites where a snapshot really had diverged.
+_NORM_CLIP = 10.0
 
 
 class _RunningNorm:
