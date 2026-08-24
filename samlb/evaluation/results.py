@@ -43,11 +43,11 @@ class RunResult:
     windowed_metrics        : Dict[str, List[float]]
     total_runtime_s         : float
     runtime_per_instance_ms : List[float]
-    cpu_time_s              : float
-    peak_memory_mb          : float
     run_id                  : int = 0
     seed                    : Optional[int] = None
     error                   : Optional[str] = None
+    cpu_time_s              : float = 0.0
+    peak_memory_mb          : float = 0.0
 
     def primary_metric(self) -> float:
         """Accuracy (cls) or R² (reg) — used for ranking in print_table."""
