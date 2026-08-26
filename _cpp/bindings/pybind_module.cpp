@@ -144,7 +144,8 @@ PYBIND11_MODULE(_samlb_core, m) {
         .def_readwrite("max_depth",        &HoeffdingTreeClassifier::max_depth)
         .def_readwrite("split_criterion",  &HoeffdingTreeClassifier::split_criterion)
         .def_readwrite("leaf_prediction",  &HoeffdingTreeClassifier::leaf_prediction)
-        .def_readwrite("n_split_points",   &HoeffdingTreeClassifier::n_split_points);
+        .def_readwrite("n_split_points",   &HoeffdingTreeClassifier::n_split_points)
+        .def_readwrite("no_pre_prune",     &HoeffdingTreeClassifier::no_pre_prune);
 
     py::class_<EFDTClassifier, HoeffdingTreeClassifier, std::shared_ptr<EFDTClassifier>>(
             m, "EFDTClassifier")

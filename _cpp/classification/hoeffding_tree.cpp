@@ -65,7 +65,7 @@ std::unordered_map<int, double> HoeffdingTreeClassifier::nb_log_proba(
             for (const auto& [feat, val] : x) {
                 const auto fit = it->second.find(feat);
                 if (fit != it->second.end()) {
-                    const double p = fit->second.probability_density(val);
+                    const double p = fit->second.est.probability_density(val);
                     lp += std::log(p > 1e-300 ? p : 1e-300);
                 }
             }
@@ -108,128 +108,170 @@ void HoeffdingTreeClassifier::update_leaf(
 }
 
 // ---------------------------------------------------------------------------
-// Helper: entropy of a count distribution
+// Split-merit machinery — mirrors MOA's InfoGainSplitCriterion /
+// GiniSplitCriterion operating on exact resulting class distributions, and
+// GaussianNumericAttributeClassObserver for how those distributions are
+// estimated for a numeric split candidate.
 // ---------------------------------------------------------------------------
 
-double HoeffdingTreeClassifier::node_entropy(
-    const std::unordered_map<int, double>& counts, double total) const
+namespace {
+
+using ClassDist = std::unordered_map<int, double>;
+
+double sum_of(const ClassDist& d) {
+    double s = 0.0;
+    for (auto& [cls, w] : d) s += w;
+    return s;
+}
+
+double gaussian_cdf(double x, double mean, double std_dev) {
+    if (std_dev <= 0.0) return (x >= mean) ? 1.0 : 0.0;
+    return 0.5 * (1.0 + std::erf((x - mean) / (std_dev * std::sqrt(2.0))));
+}
+
+// MOA's GaussianEstimator.estimatedWeight_LessThan_EqualTo_GreaterThan_Value:
+// treats the density at the split point as a point mass ("equal"), then
+// splits the remaining weight by the normal CDF.
+void estimated_weights(const AttrObserver& obs, double split_value,
+                        double& less, double& equal, double& greater)
 {
+    equal = obs.est.probability_density(split_value) * obs.est.n;
+    const double sd = obs.est.std_dev();
+    if (sd > 0.0) {
+        less = gaussian_cdf(split_value, obs.est.mean, sd) * obs.est.n - equal;
+    } else {
+        less = (split_value < obs.est.mean) ? obs.est.n - equal : 0.0;
+    }
+    double g = obs.est.n - equal - less;
+    if (g < 0.0) g = 0.0;
+    greater = g;
+}
+
+// MOA's GaussianNumericAttributeClassObserver.getClassDistsResultingFromBinarySplit:
+// values <= split_value go left. Per-class min/max shortcut the estimate
+// exactly whenever split_value falls outside a class's observed range.
+void class_dists_from_binary_split(const HTNode* node, const std::string& feat,
+                                    double split_value,
+                                    ClassDist& left, ClassDist& right)
+{
+    for (auto& [cls, feat_map] : node->stats) {
+        auto fit = feat_map.find(feat);
+        if (fit == feat_map.end() || fit->second.est.n <= 0.0) continue;
+        const AttrObserver& obs = fit->second;
+        if (split_value < obs.min_val) {
+            right[cls] += obs.est.n;
+        } else if (split_value >= obs.max_val) {
+            left[cls] += obs.est.n;
+        } else {
+            double less, equal, greater;
+            estimated_weights(obs, split_value, less, equal, greater);
+            left[cls]  += less + equal;
+            right[cls] += greater;
+        }
+    }
+}
+
+// MOA's GaussianNumericAttributeClassObserver.getSplitPointSuggestions:
+// `num_bins` points evenly spaced strictly between the global observed
+// min/max for this feature at this leaf (default 10 bins, like MOA).
+std::vector<double> split_point_suggestions(const HTNode* node,
+                                             const std::string& feat,
+                                             int num_bins)
+{
+    double min_v = std::numeric_limits<double>::infinity();
+    double max_v = -std::numeric_limits<double>::infinity();
+    for (auto& [cls, feat_map] : node->stats) {
+        auto fit = feat_map.find(feat);
+        if (fit == feat_map.end() || fit->second.est.n <= 0.0) continue;
+        min_v = std::min(min_v, fit->second.min_val);
+        max_v = std::max(max_v, fit->second.max_val);
+    }
+
+    std::vector<double> out;
+    if (!(min_v < max_v)) return out;  // no spread, or nothing observed
+
+    std::set<double> suggestions;
+    const double range = max_v - min_v;
+    for (int i = 0; i < num_bins; ++i) {
+        double split_value = range / (num_bins + 1.0) * (i + 1) + min_v;
+        if (split_value > min_v && split_value < max_v)
+            suggestions.insert(split_value);
+    }
+    out.assign(suggestions.begin(), suggestions.end());
+    return out;
+}
+
+double compute_entropy(const ClassDist& dist, double total) {
     if (total <= 0.0) return 0.0;
     double h = 0.0;
-    for (auto& [cls, cnt] : counts) {
-        if (cnt > 0.0) {
-            double p = cnt / total;
+    for (auto& [cls, w] : dist) {
+        if (w > 0.0) {
+            double p = w / total;
             h -= p * std::log2(p);
         }
     }
     return h;
 }
 
-// ---------------------------------------------------------------------------
-// info_gain: H(parent) - (n_L/n)*H(left) - (n_R/n)*H(right)
-// Uses the per-class feature Gaussian mean as a proxy split distribution.
-// For a candidate split on (feat, threshold):
-//   - instances from class c with estimator mean <= threshold go left
-//   - we approximate left/right class counts proportionally using the
-//     Gaussian CDF fraction of each class's estimator
-// ---------------------------------------------------------------------------
+// MOA's InfoGainSplitCriterion.numSubsetsGreaterThanFrac (minBranchFrac=0.01
+// default): a split only counts if at least two branches carry a
+// non-trivial share of the weight.
+constexpr double MIN_BRANCH_FRAC = 0.01;
 
-static double gaussian_cdf(double x, double mean, double std_dev) {
-    if (std_dev <= 0.0) return (x >= mean) ? 1.0 : 0.0;
-    return 0.5 * (1.0 + std::erf((x - mean) / (std_dev * std::sqrt(2.0))));
+using Branch = std::pair<const ClassDist*, double>;
+
+int num_subsets_greater_than_frac(const std::vector<Branch>& branches, double min_frac) {
+    double total = 0.0;
+    for (auto& [d, w] : branches) total += w;
+    if (total <= 0.0) return 0;
+    int count = 0;
+    for (auto& [d, w] : branches)
+        if (w / total > min_frac) ++count;
+    return count;
 }
 
-double HoeffdingTreeClassifier::info_gain(
-    HTNode* node, const std::string& feat, double threshold) const
+double merit_info_gain(const ClassDist& pre, double pre_total,
+                        const std::vector<Branch>& branches)
 {
-    double n_total = node->total_weight;
-    if (n_total <= 0.0) return 0.0;
-
-    // Parent entropy
-    double parent_h = node_entropy(node->class_counts, n_total);
-
-    // Build approximate left/right class counts
-    std::unordered_map<int, double> left_counts, right_counts;
-    double n_left = 0.0, n_right = 0.0;
-
-    for (auto& [cls, cnt] : node->class_counts) {
-        auto it = node->stats.find(cls);
-        double frac_left = 0.5; // default: unknown feature → split 50/50
-        if (it != node->stats.end()) {
-            auto fit = it->second.find(feat);
-            if (fit != it->second.end() && fit->second.n > 0.0) {
-                frac_left = gaussian_cdf(threshold,
-                                         fit->second.mean,
-                                         fit->second.std_dev());
-            }
-        }
-        double l = cnt * frac_left;
-        double r = cnt * (1.0 - frac_left);
-        left_counts[cls]  = l;
-        right_counts[cls] = r;
-        n_left  += l;
-        n_right += r;
-    }
-
-    double h_left  = node_entropy(left_counts,  n_left);
-    double h_right = node_entropy(right_counts, n_right);
-
-    double gain = parent_h
-                - (n_left  / n_total) * h_left
-                - (n_right / n_total) * h_right;
-    return gain;
+    if (num_subsets_greater_than_frac(branches, MIN_BRANCH_FRAC) < 2)
+        return -std::numeric_limits<double>::infinity();
+    double total = 0.0;
+    for (auto& [d, w] : branches) total += w;
+    if (total <= 0.0) return 0.0;
+    double post_h = 0.0;
+    for (auto& [d, w] : branches) post_h += w * compute_entropy(*d, w);
+    post_h /= total;
+    return compute_entropy(pre, pre_total) - post_h;
 }
 
-// ---------------------------------------------------------------------------
-// gini: Gini(parent) - (n_L/n)*Gini(left) - (n_R/n)*Gini(right)
-// ---------------------------------------------------------------------------
-
-static double gini_impurity(const std::unordered_map<int, double>& counts,
-                             double total) {
+double gini_impurity(const ClassDist& dist, double total) {
     if (total <= 0.0) return 0.0;
     double g = 1.0;
-    for (auto& [cls, cnt] : counts) {
-        double p = cnt / total;
+    for (auto& [cls, w] : dist) {
+        double p = w / total;
         g -= p * p;
     }
     return g;
 }
 
-double HoeffdingTreeClassifier::gini(
-    HTNode* node, const std::string& feat, double threshold) const
-{
-    double n_total = node->total_weight;
-    if (n_total <= 0.0) return 0.0;
-
-    double parent_g = gini_impurity(node->class_counts, n_total);
-
-    std::unordered_map<int, double> left_counts, right_counts;
-    double n_left = 0.0, n_right = 0.0;
-
-    for (auto& [cls, cnt] : node->class_counts) {
-        auto it = node->stats.find(cls);
-        double frac_left = 0.5;
-        if (it != node->stats.end()) {
-            auto fit = it->second.find(feat);
-            if (fit != it->second.end() && fit->second.n > 0.0) {
-                frac_left = gaussian_cdf(threshold,
-                                         fit->second.mean,
-                                         fit->second.std_dev());
-            }
-        }
-        double l = cnt * frac_left;
-        double r = cnt * (1.0 - frac_left);
-        left_counts[cls]  = l;
-        right_counts[cls] = r;
-        n_left  += l;
-        n_right += r;
-    }
-
-    double g_reduction = parent_g
-                       - (n_left  / n_total) * gini_impurity(left_counts,  n_left)
-                       - (n_right / n_total) * gini_impurity(right_counts, n_right);
-    return g_reduction;
+double merit_gini(const std::vector<Branch>& branches) {
+    double total = 0.0;
+    for (auto& [d, w] : branches) total += w;
+    if (total <= 0.0) return 0.0;
+    double g = 0.0;
+    for (auto& [d, w] : branches) g += (w / total) * gini_impurity(*d, w);
+    return 1.0 - g;
 }
+
+double merit_of_split(const std::string& criterion,
+                       const ClassDist& pre, double pre_total,
+                       const std::vector<Branch>& branches)
+{
+    return (criterion == "gini") ? merit_gini(branches)
+                                  : merit_info_gain(pre, pre_total, branches);
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // majority_class: return the class with the highest count at a leaf
@@ -246,7 +288,12 @@ int HoeffdingTreeClassifier::majority_class(const HTNode* node) const {
 }
 
 // ---------------------------------------------------------------------------
-// try_split: attempt to split a leaf using Hoeffding bound
+// try_split: attempt to split a leaf using the Hoeffding bound, mirroring
+// MOA's HoeffdingTree.attemptToSplit — one best candidate per attribute (via
+// class_dists_from_binary_split / split_point_suggestions above), a null
+// "don't split" candidate for pre-pruning, and a split iff the best merit
+// clears the second-best by more than the bound (or the bound itself is
+// already tight, MOA's tie-break).
 // ---------------------------------------------------------------------------
 
 void HoeffdingTreeClassifier::set_subspace(int size, unsigned int seed) {
@@ -258,168 +305,114 @@ void HoeffdingTreeClassifier::try_split(HTNode* node, int depth) {
     if (depth >= max_depth) return;
     if (node->total_weight < 2.0) return;
 
-    // Collect all feature names seen at this leaf
-    std::set<std::string> features;
-    for (auto& [cls, feat_map] : node->stats)
-        for (auto& [feat, est] : feat_map)
-            features.insert(feat);
-
-    if (features.empty()) return;
-
-    // Number of classes seen at this node
     int n_classes = static_cast<int>(seen_classes.size());
     if (n_classes < 2) return;
 
-    // Hoeffding bound range depends on criterion
-    // For info_gain: range = log2(n_classes) (max possible entropy)
-    // For gini:      range = 1.0
+    std::set<std::string> features;
+    for (auto& [cls, feat_map] : node->stats)
+        for (auto& [feat, obs] : feat_map)
+            features.insert(feat);
+    if (features.empty()) return;
+
+    // Hoeffding bound range depends on criterion:
+    // info_gain -> log2(n_classes) (max possible entropy); gini -> 1.0
     double range = (split_criterion == "gini")
                  ? 1.0
-                 : std::log2(static_cast<double>(n_classes));
-
+                 : std::log2(static_cast<double>(std::max(n_classes, 2)));
     double epsilon = hoeffding_bound(range, split_confidence, node->total_weight);
 
-    // Evaluate each feature at its overall weighted mean as the split threshold
-    double best_score  = -std::numeric_limits<double>::infinity();
-    double second_best = -std::numeric_limits<double>::infinity();
-    std::string best_feature;
-    double       best_threshold = 0.0;
+    struct Candidate {
+        bool        is_null   = false;
+        std::string feature;
+        double      threshold = 0.0;
+        double      merit     = -std::numeric_limits<double>::infinity();
+        ClassDist   left, right;
+    };
+    std::vector<Candidate> candidates;
+
+    // Pre-pruning "null" option: the merit of not splitting at all.
+    if (!no_pre_prune) {
+        Candidate c;
+        c.is_null = true;
+        c.merit = merit_of_split(split_criterion, node->class_counts, node->total_weight,
+                                  {{&node->class_counts, node->total_weight}});
+        candidates.push_back(std::move(c));
+    }
 
     // Random subspace, resampled at every split attempt (ARF).
-    std::vector<std::string> candidates(features.begin(), features.end());
-    if (subspace_size_ > 0 && static_cast<int>(candidates.size()) > subspace_size_) {
-        std::shuffle(candidates.begin(), candidates.end(), split_rng_);
-        candidates.resize(static_cast<size_t>(subspace_size_));
+    std::vector<std::string> cand_feats(features.begin(), features.end());
+    if (subspace_size_ > 0 && static_cast<int>(cand_feats.size()) > subspace_size_) {
+        std::shuffle(cand_feats.begin(), cand_feats.end(), split_rng_);
+        cand_feats.resize(static_cast<size_t>(subspace_size_));
     }
 
-    for (const auto& feat : candidates) {
-        // Candidate thresholds. A single split point (the weighted mean) is far
-        // too coarse for a numeric attribute — a VFDT evaluates a range of
-        // candidates. Here the per-class Gaussian summaries give a mean and a
-        // spread, and n_split_points thresholds are laid out across
-        // [mean - 3sd, mean + 3sd] pooled over the classes at this leaf.
-        double w_mean = 0.0, w_var = 0.0, w_total = 0.0;
-        for (auto& [cls, cnt] : node->class_counts) {
-            auto it = node->stats.find(cls);
-            if (it == node->stats.end()) continue;
-            auto fit = it->second.find(feat);
-            if (fit == it->second.end() || fit->second.n <= 0.0) continue;
-            w_mean  += cnt * fit->second.mean;
-            w_total += cnt;
-        }
-        if (w_total <= 0.0) continue;
-        w_mean /= w_total;
+    for (const auto& feat : cand_feats) {
+        std::vector<double> thresholds = split_point_suggestions(node, feat, n_split_points);
+        if (thresholds.empty()) continue;
 
-        // Pooled spread: within-class variance plus the spread of class means.
-        for (auto& [cls, cnt] : node->class_counts) {
-            auto it = node->stats.find(cls);
-            if (it == node->stats.end()) continue;
-            auto fit = it->second.find(feat);
-            if (fit == it->second.end() || fit->second.n <= 0.0) continue;
-            const double d = fit->second.mean - w_mean;
-            w_var += cnt * (fit->second.variance() + d * d);
-        }
-        const double sd = std::sqrt(w_var / w_total);
-
-        std::vector<double> thresholds;
-        if (sd <= 0.0 || n_split_points <= 1) {
-            thresholds.push_back(w_mean);
-        } else {
-            const double lo = w_mean - 3.0 * sd, hi = w_mean + 3.0 * sd;
-            const double step = (hi - lo) / (n_split_points + 1);
-            for (int t = 1; t <= n_split_points; ++t) thresholds.push_back(lo + t * step);
-        }
-
-        // Best threshold *for this feature*.
-        double feat_score = -std::numeric_limits<double>::infinity();
-        double feat_threshold = w_mean;
+        Candidate best_for_feat;
+        best_for_feat.feature = feat;
         for (double threshold : thresholds) {
-            const double score = (split_criterion == "gini")
-                               ? gini(node, feat, threshold)
-                               : info_gain(node, feat, threshold);
-            if (score > feat_score) { feat_score = score; feat_threshold = threshold; }
+            ClassDist left, right;
+            class_dists_from_binary_split(node, feat, threshold, left, right);
+            double left_total  = sum_of(left);
+            double right_total = sum_of(right);
+            double merit = merit_of_split(split_criterion, node->class_counts, node->total_weight,
+                                           {{&left, left_total}, {&right, right_total}});
+            if (merit > best_for_feat.merit) {
+                best_for_feat.merit     = merit;
+                best_for_feat.threshold = threshold;
+                best_for_feat.left      = std::move(left);
+                best_for_feat.right     = std::move(right);
+            }
         }
-
-        // The Hoeffding bound compares the best attribute with the SECOND-BEST
-        // ATTRIBUTE. Ranking individual thresholds here instead would put two
-        // neighbouring cut points of the same feature in the top two slots,
-        // driving their difference to ~0 and firing the tie-break on every
-        // attempt — which splits the tree on noise.
-        if (feat_score > best_score) {
-            second_best    = best_score;
-            best_score     = feat_score;
-            best_feature   = feat;
-            best_threshold = feat_threshold;
-        } else if (feat_score > second_best) {
-            second_best = feat_score;
-        }
+        candidates.push_back(std::move(best_for_feat));
     }
 
-    if (best_feature.empty()) return;
+    if (candidates.empty()) return;
 
-    // Check Hoeffding bound condition
-    bool do_split = false;
-    if (best_score <= 0.0) return; // No gain — nothing to split on
+    size_t best_idx = 0;
+    for (size_t i = 1; i < candidates.size(); ++i)
+        if (candidates[i].merit > candidates[best_idx].merit) best_idx = i;
 
-    double delta = best_score - second_best;
-    if (delta > epsilon) {
-        do_split = true;
-    } else if (delta < tie_threshold && epsilon < tie_threshold) {
-        // Tie-breaking: split anyway when bound is tight
-        do_split = true;
+    double second_best_merit = -std::numeric_limits<double>::infinity();
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (i == best_idx) continue;
+        if (candidates[i].merit > second_best_merit) second_best_merit = candidates[i].merit;
     }
 
-    if (!do_split) return;
+    const Candidate& best = candidates[best_idx];
+    if (best.merit == -std::numeric_limits<double>::infinity()) return;
 
-    // Perform the split: convert leaf → split node, create two child leaves
-    node->is_leaf      = false;
-    node->split_feature = best_feature;
-    node->split_value   = best_threshold;
+    bool should_split;
+    if (candidates.size() < 2) {
+        should_split = true;   // only one suggestion at all -> take it (matches MOA)
+    } else {
+        double delta = best.merit - second_best_merit;
+        should_split = (delta > epsilon) || (epsilon < tie_threshold);
+    }
+    if (!should_split) return;
+    if (best.is_null) return;  // pre-prune: "don't split" won
+
+    // Perform the split: convert leaf -> split node, create two child leaves
+    node->is_leaf       = false;
+    node->split_feature  = best.feature;
+    node->split_value    = best.threshold;
 
     node->left  = std::make_unique<HTNode>();
     node->right = std::make_unique<HTNode>();
 
-    // Redistribute accumulated stats proportionally to children
-    for (auto& [cls, cnt] : node->class_counts) {
-        auto it = node->stats.find(cls);
-        double frac_left = 0.5;
-        if (it != node->stats.end()) {
-            auto fit = it->second.find(best_feature);
-            if (fit != it->second.end() && fit->second.n > 0.0) {
-                frac_left = gaussian_cdf(best_threshold,
-                                          fit->second.mean,
-                                          fit->second.std_dev());
-            }
-        }
-        double l = cnt * frac_left;
-        double r = cnt * (1.0 - frac_left);
-        if (l > 0.0) node->left->class_counts[cls]  = l;
-        if (r > 0.0) node->right->class_counts[cls] = r;
-        node->left->total_weight  += l;
-        node->right->total_weight += r;
-        // Copy feature stats proportionally
-        if (it != node->stats.end()) {
-            for (auto& [feat2, est] : it->second) {
-                if (l > 0.0) {
-                    // Approximate: copy estimator scaled by fraction
-                    GaussianEstimator g_l;
-                    g_l.n    = est.n * frac_left;
-                    g_l.mean = est.mean;
-                    g_l.M2   = est.M2 * frac_left;
-                    node->left->stats[cls][feat2] = g_l;
-                }
-                if (r > 0.0) {
-                    GaussianEstimator g_r;
-                    g_r.n    = est.n * (1.0 - frac_left);
-                    g_r.mean = est.mean;
-                    g_r.M2   = est.M2 * (1.0 - frac_left);
-                    node->right->stats[cls][feat2] = g_r;
-                }
-            }
-        }
-    }
+    double left_total = 0.0, right_total = 0.0;
+    for (auto& [cls, w] : best.left)
+        if (w > 0.0) { node->left->class_counts[cls] = w; left_total += w; }
+    for (auto& [cls, w] : best.right)
+        if (w > 0.0) { node->right->class_counts[cls] = w; right_total += w; }
+    node->left->total_weight  = left_total;
+    node->right->total_weight = right_total;
 
-    // Clear leaf-level data from the now-internal node
+    // Children start with empty attribute observers and rebuild them from
+    // scratch as new instances arrive — matching MOA, which does not carry a
+    // parent's per-attribute statistics into its new leaves.
     node->stats.clear();
     node->class_counts.clear();
     node->total_weight = 0.0;
@@ -508,7 +501,7 @@ std::unordered_map<int, double> HoeffdingTreeClassifier::predict_proba_one(
                 for (auto& [feat, val] : x) {
                     auto fit = it->second.find(feat);
                     if (fit != it->second.end()) {
-                        double pd = fit->second.probability_density(val);
+                        double pd = fit->second.est.probability_density(val);
                         p *= (pd > 1e-300 ? pd : 1e-300);
                     }
                 }

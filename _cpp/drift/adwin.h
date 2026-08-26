@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <cstddef>
 
 // ADWIN2 (Bifet & Gavaldà) — port of the MOA/river adaptive-windowing detector.
 // Defaults match river.drift.ADWIN so drift behaviour is unchanged.
