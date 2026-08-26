@@ -5,6 +5,81 @@ All notable changes to SAMLB are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-08-26
+
+### Added
+- `SGBTClassifier` / `SGBRRegressor` — Streaming Gradient Boosted Trees, the
+  first boosting method in the pool; everything else (ARF, SRP, Leveraging
+  Bagging) is bagging-family. These are **two different methods sharing one
+  boosting machine**, not one method with two output types. Classification
+  follows Gunasekara, Pfahringer, Gomes & Bifet (*Machine Learning* 2024): 100
+  boosting iterations, learning rate 0.0125, a single tree per iteration.
+  Regression follows SGBR (same authors, *DMKD* 2025): 10 iterations, learning
+  rate 1.0, and a Poisson(1) bag of 10 trees per iteration, the paper's
+  SGB(Oza) variant. The learning rate is the part that cannot be shared: at
+  0.0125 the raw score reaches only `1 - (1 - lr)^n` of the target, 0.71 after
+  100 iterations, and that 29% shrinkage is a bias term that destroys R² on any
+  target whose mean is large relative to its spread.
+- `FIMTDDRegressor` — Fast Incremental Model Tree with Drift Detection
+  (Ikonomovska, Gama & Džeroski, *DMKD* 2011): E-BST attribute observers, the
+  ratio form of the Hoeffding test compared across attributes, and
+  Page-Hinckley drift detection with alternate subtrees. It exists because
+  `HoeffdingTreeRegressor` barely splits — it summarises each feature with a
+  Gaussian and tries a few interpolated cut points, where FIMT-DD keeps every
+  observed value as an exact candidate. On a step function the older tree
+  scores MAE 0.68 against a constant predictor's 1.0; FIMT-DD scores 0.005.
+- **MOA's FIMT-DD perceptron diverges, and the fix is carried here.** Its leaf
+  model normalises by *running* global feature statistics, so an instance seen
+  while a feature's spread is still near zero overshoots the weights and
+  nothing bounds the output afterwards. `leaf_prediction="adaptive"` (default)
+  bounds the perceptron to the leaf's own observed target range and uses it
+  only while it beats the leaf mean. `"perceptron"` keeps the reference form,
+  divergence included, so the defect stays reproducible.
+- `LeveragingBaggingRegressor` — an **adaptation**, not a port. Leveraging
+  Bagging (Bifet, Holmes & Pfahringer, ICDM 2010) is classification-only;
+  neither MOA nor River has a regression version. Poisson(6) resampling and
+  per-member ADWIN-with-reset carry over unchanged; the random output codes are
+  dropped, being defined over class labels, which MOA itself makes optional.
+  The one addition a continuous target forces is feeding ADWIN the absolute
+  error over the target's running spread, since a raw residual would tie the
+  detector's sensitivity to the units of `y`. Cite it as an adaptation.
+- The regression and classification ensemble pools are now symmetric, five
+  candidates each: ARF, SRP, Leveraging Bagging, the drift-adaptive tree
+  (`HoeffdingAdaptiveTreeClassifier` / `FIMTDDRegressor`), and the boosting
+  method (SGBT / SGBR).
+- `RunResult.cpu_time_s` and `RunResult.peak_memory_mb` — process CPU time and
+  peak resident memory are now recorded natively by `PrequentialEvaluator`,
+  alongside the existing wall-clock. CPU time is the figure to quote on a
+  shared machine, since wall-clock reflects whatever else is running.
+
+### Changed
+- **`HoeffdingTreeClassifier` split search now matches MOA's reference**
+  (`GaussianNumericAttributeClassObserver` with Info/Gini gain). Per (class,
+  feature) Gaussian summaries carry the observed min/max, so split-weight
+  estimates are exact at the tails instead of trusting the Gaussian CDF where
+  it is least reliable; candidate split points are evenly spaced between the
+  observed min and max with `n_split_points` raised from 1 to 10 (MOA's
+  `numBinsOption` default); and merit is computed on the exact resulting class
+  distributions rather than a mean ± 3σ heuristic. Evaluating a single
+  threshold at the weighted mean was badly under-splitting. `no_pre_prune` is
+  exposed through the bindings. Thanks to Daniel Nowak.
+  **This changes results.** `HoeffdingTreeClassifier` is in
+  `SHARED_MODEL_POOL`, so every benchmark number that involves it is expected
+  to move. The published tables in `benchmark_results/` predate the fix and
+  need regenerating before they are quoted again.
+
+### Fixed
+- ASML regression: the divergence guard was six orders of magnitude too loose,
+  letting a diverged pipeline's prediction through effectively unclipped. On
+  `fifa` this cost 0.6076 R² against 0.7552 once tightened, and on
+  `superconductivity` 0.7728 against 0.8569.
+
+### Removed
+- The benchmark tables, raw result files and changelog carried an entry for a
+  stacking framework that was added and then removed during the 0.2.0 cycle and
+  is not part of this package. Its rows were being published as though they
+  described something installable here.
+
 ## [0.5.0] - 2026-08-22
 
 ### Added
@@ -105,6 +180,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   classification/regression datasets.
 - Datasets auto-download from GitHub on first use and are cached locally.
 
+[0.6.0]: https://github.com/TechyNilesh/samlb/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/TechyNilesh/samlb/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/TechyNilesh/samlb/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/TechyNilesh/samlb/compare/v0.2.0...v0.3.0
