@@ -73,9 +73,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   stage.
 - SOTA streaming ensemble baselines: ARF (Gomes et al. 2017) and SRP (Gomes
   et al. 2019), validated against River's reference implementations.
-- StreamingAutoGluon framework — online stacking of k-fold cross-validated
-  stream learners, ported from the original Java reference implementation.
-  (Later removed in this same cycle; see below.)
 - OAML reimplemented with GAMA-style pipeline search.
 - Benchmark results published in the README.
 
@@ -84,9 +81,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Windows build fixed; deprecated `macos-13` CI runner dropped in favour of
   current runners.
 - ARF removed from the regression shared learner pool.
-
-### Removed
-- StreamingAutoGluon, after being added earlier in this cycle.
 
 ### Fixed
 - `HoeffdingTreeClassifier` previously only ever predicted the majority
