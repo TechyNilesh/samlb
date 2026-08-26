@@ -33,6 +33,9 @@
 #include "../ensemble/arf_cls.h"
 #include "../ensemble/srp_cls.h"
 #include "../ensemble/srp_reg.h"
+#include "../regression/fimtdd.h"
+#include "../ensemble/leveraging_bagging_reg.h"
+#include "../ensemble/sgbt.h"
 #include "../ensemble/leveraging_bagging_cls.h"
 
 // Preprocessing / feature selection
@@ -339,6 +342,97 @@ PYBIND11_MODULE(_samlb_core, m) {
         .def("reset",       &SRPRegressor::reset)
         .def_readwrite("n_models", &SRPRegressor::n_models)
         .def_readwrite("seed",     &SRPRegressor::seed);
+
+    py::class_<FIMTDDRegressor, IRegressor, std::shared_ptr<FIMTDDRegressor>>(m, "FIMTDDRegressor")
+        .def(py::init<int, double, double, int, std::string, double, double, bool,
+                      double, double, double, int, int, bool, int>(),
+             py::arg("grace_period")                = 200,
+             py::arg("split_confidence")            = 1e-7,
+             py::arg("tie_threshold")               = 0.05,
+             py::arg("max_depth")                   = 20,
+             py::arg("leaf_prediction")             = "adaptive",
+             py::arg("learning_ratio")              = 0.02,
+             py::arg("learning_rate_decay")         = 0.001,
+             py::arg("learning_ratio_const")        = false,
+             py::arg("page_hinckley_alpha")         = 0.005,
+             py::arg("page_hinckley_threshold")     = 50.0,
+             py::arg("alternate_tree_fading_factor")= 0.995,
+             py::arg("alternate_tree_t_min")        = 150,
+             py::arg("alternate_tree_time")         = 1500,
+             py::arg("drift_detection")             = true,
+             py::arg("seed")                        = 1)
+        .def("learn_one",   &FIMTDDRegressor::learn_one)
+        .def("predict_one", &FIMTDDRegressor::predict_one)
+        .def("reset",       &FIMTDDRegressor::reset)
+        .def("n_splits",    &FIMTDDRegressor::n_splits)
+        .def_readwrite("grace_period",     &FIMTDDRegressor::grace_period)
+        .def_readwrite("split_confidence", &FIMTDDRegressor::split_confidence)
+        .def_readwrite("leaf_prediction",  &FIMTDDRegressor::leaf_prediction)
+        .def_readwrite("drift_detection",  &FIMTDDRegressor::drift_detection)
+        .def_readwrite("seed",             &FIMTDDRegressor::seed);
+
+    py::class_<LeveragingBaggingRegressor, IRegressor,
+               std::shared_ptr<LeveragingBaggingRegressor>>(m, "LeveragingBaggingRegressor")
+        .def(py::init<int, int, double, double, int, int, double, std::string>(),
+             py::arg("n_models")         = 10,
+             py::arg("seed")             = 0,
+             py::arg("lambda_value")     = 6.0,
+             py::arg("drift_delta")      = 0.002,
+             py::arg("grace_period")     = 50,
+             py::arg("max_depth")        = 20,
+             py::arg("split_confidence") = 0.01,
+             py::arg("leaf_prediction")  = "adaptive")
+        .def("learn_one",   &LeveragingBaggingRegressor::learn_one)
+        .def("predict_one", &LeveragingBaggingRegressor::predict_one)
+        .def("reset",       &LeveragingBaggingRegressor::reset)
+        .def_readwrite("n_models",     &LeveragingBaggingRegressor::n_models)
+        .def_readwrite("lambda_value", &LeveragingBaggingRegressor::lambda_value)
+        .def_readwrite("seed",         &LeveragingBaggingRegressor::seed);
+
+    py::class_<SGBTClassifier, IClassifier, std::shared_ptr<SGBTClassifier>>(m, "SGBTClassifier")
+        .def(py::init<int, double, int, int, int, bool, int, int, bool, int, double, int, std::string, int>(),
+             py::arg("n_models")                = 100,
+             py::arg("learning_rate")           = 0.0125,
+             py::arg("percentage_of_features")  = 75,
+             py::arg("multiply_hessian_by")     = 1,
+             py::arg("skip_training")           = 1,
+             py::arg("use_squared_loss")        = false,
+             py::arg("bag_size")                = 1,
+             py::arg("n_classes")               = 0,
+             py::arg("scale_prediction_by_lr")  = false,
+             py::arg("grace_period")            = 25,
+             py::arg("split_confidence")        = 0.05,
+             py::arg("max_depth")               = 20,
+             py::arg("leaf_prediction")         = "mean",
+             py::arg("seed")                    = 1)
+        .def("learn_one",         &SGBTClassifier::learn_one)
+        .def("predict_one",       &SGBTClassifier::predict_one)
+        .def("predict_proba_one", &SGBTClassifier::predict_proba_one)
+        .def("reset",             &SGBTClassifier::reset)
+        .def_readwrite("n_models",      &SGBTClassifier::n_models)
+        .def_readwrite("learning_rate", &SGBTClassifier::learning_rate)
+        .def_readwrite("n_classes",     &SGBTClassifier::n_classes)
+        .def_readwrite("seed",          &SGBTClassifier::seed);
+
+    py::class_<SGBRRegressor, IRegressor, std::shared_ptr<SGBRRegressor>>(m, "SGBRRegressor")
+        .def(py::init<int, double, int, int, int, int, int, double, int, std::string, int>(),
+             py::arg("n_models")               = 10,
+             py::arg("learning_rate")          = 1.0,
+             py::arg("percentage_of_features") = 75,
+             py::arg("multiply_hessian_by")    = 1,
+             py::arg("skip_training")          = 1,
+             py::arg("bag_size")               = 10,
+             py::arg("grace_period")           = 50,
+             py::arg("split_confidence")       = 0.01,
+             py::arg("max_depth")              = 20,
+             py::arg("leaf_prediction")        = "mean",
+             py::arg("seed")                   = 1)
+        .def("learn_one",   &SGBRRegressor::learn_one)
+        .def("predict_one", &SGBRRegressor::predict_one)
+        .def("reset",       &SGBRRegressor::reset)
+        .def_readwrite("n_models",      &SGBRRegressor::n_models)
+        .def_readwrite("learning_rate", &SGBRRegressor::learning_rate)
+        .def_readwrite("seed",          &SGBRRegressor::seed);
 
     // ------------------------------------------------------------------ //
     //  PREPROCESSING

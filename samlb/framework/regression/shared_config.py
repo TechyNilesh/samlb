@@ -19,10 +19,13 @@ from samlb.framework.base import MaxAbsScaler, MinMaxScaler, SelectKBest, Standa
 from samlb.framework.base._cpp_wrappers import (
     ARFRegressor,
     BayesianLinearRegression,
+    FIMTDDRegressor,
+    LeveragingBaggingRegressor,
     HoeffdingTreeRegressor,
     KNNRegressor,
     LinearRegression,
     PassiveAggressiveRegressor,
+    SGBRRegressor,
     SRPRegressor,
 )
 from samlb.framework.regression.asml.helper import range_gen
@@ -44,6 +47,7 @@ SHARED_MODEL_POOL = [
     PassiveAggressiveRegressor(),
     KNNRegressor(),
     HoeffdingTreeRegressor(),
+    FIMTDDRegressor(),
 ]
 
 # ── Ensemble baseline pool ──────────────────────────────────────────────────
@@ -55,6 +59,14 @@ SHARED_MODEL_POOL = [
 ENSEMBLE_MODEL_POOL = [
     ARFRegressor(),
     SRPRegressor(),
+    # SGBR (Gunasekara et al., DMKD 2025) — the only boosting method here.
+    SGBRRegressor(),
+    # Counterparts of the two classification-only entries in the classification
+    # pool. LeveragingBaggingRegressor is an adaptation, not a port — see its
+    # docstring; FIMTDDRegressor is the drift-adaptive tree that stands where
+    # HoeffdingAdaptiveTreeClassifier stands for classification.
+    LeveragingBaggingRegressor(),
+    FIMTDDRegressor(),
 ]
 
 # ── Hyperparameter search spaces ──────────────────────────────────────────────
@@ -90,6 +102,26 @@ SHARED_HYPERPARAMETERS = {
         "lambda_value": range_gen(1.0, 10.0, step=1.0, float_n=True),
         "grace_period": range_gen(50, 500, step=50),
         "max_depth":    range_gen(10, 100, step=10),
+    },
+    "FIMTDDRegressor": {
+        "grace_period":     range_gen(50, 500, step=50),
+        "split_confidence": [1e-9, 1e-7, 1e-4, 1e-2],
+        "tie_threshold":    range_gen(0.01, 0.2, step=0.02, float_n=True),
+        "max_depth":        range_gen(10, 100, step=10),
+        "leaf_prediction":  ["adaptive", "mean"],
+    },
+    "LeveragingBaggingRegressor": {
+        "n_models":     range_gen(5, 30, step=5),
+        "lambda_value": range_gen(1.0, 10.0, step=1.0, float_n=True),
+        "drift_delta":  [1e-4, 1e-3, 1e-2, 5e-2],
+        "grace_period": range_gen(50, 500, step=50),
+    },
+    "SGBRRegressor": {
+        "n_models":               range_gen(5, 30, step=5),
+        "learning_rate":          [0.25, 0.5, 1.0],
+        "percentage_of_features": range_gen(50, 100, step=10),
+        "bag_size":               [1, 5, 10, 20],
+        "skip_training":          [1, 2, 4],
     },
     "SRPRegressor": {
         "n_models":          range_gen(5, 30, step=5),
@@ -151,6 +183,16 @@ ENSEMBLE_REGRESSOR_INSTANCES = [
     SRPRegressor(n_models=10),
     SRPRegressor(n_models=10, training_method="subspaces"),
     SRPRegressor(n_models=10, subspace_fraction=0.4),
+    # SGBR
+    SGBRRegressor(),
+    SGBRRegressor(n_models=20, bag_size=5),
+    SGBRRegressor(n_models=10, learning_rate=0.5),
+    # Leveraging Bagging (adapted)
+    LeveragingBaggingRegressor(n_models=10),
+    LeveragingBaggingRegressor(n_models=20, lambda_value=8.0),
+    # FIMT-DD
+    FIMTDDRegressor(),
+    FIMTDDRegressor(grace_period=100, leaf_prediction="mean"),
 ]
 
 

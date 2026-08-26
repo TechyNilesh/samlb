@@ -27,6 +27,7 @@ from samlb.framework.base._cpp_wrappers import (
     KNNClassifier,
     LeveragingBaggingClassifier,
     LogisticRegression,
+    SGBTClassifier,
     NaiveBayes,
     PassiveAggressiveClassifier,
     Perceptron,
@@ -72,6 +73,12 @@ ENSEMBLE_MODEL_POOL = [
     SRPClassifier(),
     LeveragingBaggingClassifier(),
     HoeffdingAdaptiveTreeClassifier(),
+    # The only boosting method in the pool; everything above is bagging-family.
+    # At the paper's 100 boosting iterations, cost per instance is 100 x the
+    # class count in trees, each touched twice — by a wide margin the most
+    # expensive candidate here. Drop n_models if a search framework has to fit
+    # it many times.
+    SGBTClassifier(),
 ]
 
 # ── Hyperparameter search spaces ──────────────────────────────────────────────
@@ -123,6 +130,13 @@ SHARED_HYPERPARAMETERS = {
         "lambda_value":      range_gen(1.0, 10.0, step=1.0, float_n=True),
         "subspace_fraction": range_gen(0.2, 0.9, step=0.1, float_n=True),
         "training_method":   ["patches", "subspaces", "resampling"],
+    },
+    "SGBTClassifier": {
+        "n_models":               range_gen(10, 100, step=10),
+        "learning_rate":          [0.0125, 0.05, 0.1, 0.25],
+        "percentage_of_features": range_gen(50, 100, step=10),
+        "bag_size":               [1, 5, 10],
+        "skip_training":          [1, 2, 4],
     },
     "LeveragingBaggingClassifier": {
         "n_models":     range_gen(5, 30, step=5),
@@ -196,6 +210,11 @@ ENSEMBLE_CLASSIFIER_INSTANCES = [
     # Hoeffding Adaptive Tree
     HoeffdingAdaptiveTreeClassifier(),
     HoeffdingAdaptiveTreeClassifier(grace_period=100, drift_delta=0.01),
+    # SGBT — cheaper than the paper's 100 iterations, so a search framework can
+    # afford to fit it alongside the rest.
+    SGBTClassifier(n_models=25),
+    SGBTClassifier(n_models=25, learning_rate=0.05),
+    SGBTClassifier(n_models=50, bag_size=5),
 ]
 
 

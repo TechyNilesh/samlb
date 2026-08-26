@@ -43,11 +43,14 @@ set(CPP_SOURCES
     _cpp/regression/passive_aggressive_reg.cpp
     _cpp/regression/knn_reg.cpp
     _cpp/regression/hoeffding_tree_reg.cpp
+    _cpp/regression/fimtdd.cpp
     _cpp/regression/arf_reg.cpp
     _cpp/ensemble/arf_cls.cpp
     _cpp/ensemble/srp_cls.cpp
     _cpp/ensemble/srp_reg.cpp
     _cpp/ensemble/leveraging_bagging_cls.cpp
+    _cpp/ensemble/leveraging_bagging_reg.cpp
+    _cpp/ensemble/sgbt.cpp
     _cpp/preprocessing/scalers.cpp
     _cpp/preprocessing/feature_selection.cpp
     _cpp/metrics/metrics.cpp
